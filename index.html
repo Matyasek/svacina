@@ -5,1079 +5,1241 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>SVAČINA</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #fbf9ee; }
-  #c { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: crosshair; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#f6f3e8; }
+  #c { display:block; width:100vw; height:100vh; touch-action:none; cursor:crosshair; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <script>
 "use strict";
-(function () {
+(function(){
 
-  // ---------- základ ----------
-  var canvas = document.getElementById("c");
-  var ctx = canvas.getContext("2d");
-  var W = 0, H = 0, DPR = 1;
-  var paper = null; // předkreslený čtverečkovaný papír
+/* ============================== zaklad ============================== */
 
-  var HAND = '"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive';
-  var COL_RED = "#c22f24";
-  var COL_RED2 = "#d84a3c";
-  var COL_BLUE = "#2b4fae";
-  var COL_PENCIL = "#8a8a8a";
-  var COL_INK = "#1b2340";
-  var COL_PAPER = "#fbf9ee";
-  var COL_GRID = "#c9dcec";
-  var MARGIN_X = 46;      // červený okraj stránky (dekorace)
-  var B = 16;             // odsazení herní plochy od okrajů
+var canvas = document.getElementById("c");
+var ctx = canvas.getContext("2d");
+var W = 0, H = 0, DPR = 1;
 
-  var state = "menu";     // menu | play | paused | over
-  var elapsed = 0;        // čas přežití
-  var grace = 0;          // ochranná lhůta
-  var boil = 0;           // varianta "boiling lines"
-  var nowSec = 0;
-  var overAt = 0;         // kdy nastal konec (proti překliknutí)
-  var pausedFrom = null;  // odkud se pauzlo
-  var bestTime = null;
-  var newRecord = false;
-  var finalGrade = null;
+var FONT = '"Segoe Print","Bradley Hand","Marker Felt","Comic Sans MS",cursive';
 
-  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  (function () { var b = lsGet("svacina_best"); if (b !== null && !isNaN(+b)) bestTime = +b; })();
+var CFG = {
+  playerR: 13,
+  accel: 980,
+  fric: 2.4,          // exponencialni tlumeni
+  maxSpeed: 335,
+  blotSlow: 0.42,     // nasobek max rychlosti v kance
+  glassesSlow: 0.5,   // nasobek pri kance na bryle
+  glassesDur: 3.5,
 
-  // deterministický šum pro roztřesené čáry
-  function h1(n) { var s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
-  function wob(seed, i, amp) { return (h1(seed * 57.31 + i * 13.7 + boil * 101.3) * 2 - 1) * amp; }
-  function clamp(v, a, b2) { return v < a ? a : (v > b2 ? b2 : v); }
-  function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
-  function angDiff(a, b2) { var d = b2 - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; }
+  segR: 10,
+  headR: 12.5,
+  spacing: 15,
+  startLen: 10,
+  minLen: 5,
+  snakeBase: 104,
+  snakeAccel: 1.5,
+  snakeMax: 272,
 
-  // ---------- entity ----------
-  var player = { x: 300, y: 300, vx: 0, vy: 0, rot: 0, r: 13 };
-  var target = { x: 300, y: 300 };
-  var keys = {};
-  var keyboardActive = false;
-  var pressPointer = false;
-  var pdown = { x: 0, y: 0, t: 0, state: "" };
+  grace: 2.0,
+  lungeMin: 8, lungeMax: 14,
+  teleDur: 0.5,
+  sprintDur: 1.0,
+  sprintMul: 2.05,
 
-  var SPACING = 12;
-  var SEG_R = 9;
-  var snake = {
-    x: 0, y: 0, ang: 0, segs: [], path: [], targetLen: 10,
-    lunge: "none", lungeT: 0, nextLunge: 10, lungeAng: 0,
-    frozen: 0, closeT: 0
-  };
+  fakeAutoMin: 8, fakeAutoMax: 12,
+  fakeAutoMax2: 2,      // max automatickych na plose
+  fakeLife: 26,
+  fakeGrow: 4,
+  drawCd: 4.0,
 
-  var fakes = [];            // {x,y,seed}
-  var nextAutoFake = 9;
-  var drawCd = 0;            // cooldown kreslení
-  var DRAW_CD = 4;
+  markMin: 9, markMax: 16,
+  markLife: 7,
 
-  var powerups = [];         // {x,y,type,life,seed}
-  var nextPower = 11;
+  eraseCount: 5,
+  bellDur: 2.0
+};
 
-  var blots = [];            // {x,y,r,seed}
+/* deterministicky sum pro "boiling lines" */
+var boil = 0;
+function jr(seed){
+  var x = Math.sin(seed * 127.1 + boil * 311.7 + 0.5) * 43758.5453;
+  return x - Math.floor(x);
+}
+function rnd(a, b){ return a + Math.random() * (b - a); }
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function dist(ax, ay, bx, by){ var dx = ax - bx, dy = ay - by; return Math.sqrt(dx*dx + dy*dy); }
+function angNorm(a){ while(a > Math.PI) a -= Math.PI*2; while(a < -Math.PI) a += Math.PI*2; return a; }
 
-  // ---------- zvuk (Web Audio, až po interakci) ----------
-  var AC = null;
-  function ensureAudio() {
-    try {
-      if (!AC && (window.AudioContext || window.webkitAudioContext)) {
-        AC = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (AC && AC.state === "suspended") { AC.resume().catch(function () {}); }
-    } catch (e) { AC = null; }
-  }
-  function noiseBuf(dur) {
-    var n = Math.floor(AC.sampleRate * dur);
-    var buf = AC.createBuffer(1, n, AC.sampleRate);
+/* ============================== zvuk ============================== */
+
+var AC = null, master = null, audioReady = false;
+function initAudio(){
+  if(audioReady) return;
+  try{
+    var Ctor = window.AudioContext || window.webkitAudioContext;
+    if(!Ctor) return;
+    AC = new Ctor();
+    master = AC.createGain();
+    master.gain.value = 0.5;
+    master.connect(AC.destination);
+    audioReady = true;
+  }catch(e){ AC = null; audioReady = false; }
+}
+function ac(){
+  if(!audioReady || !AC) return null;
+  if(AC.state === "suspended"){ try{ AC.resume(); }catch(e){} }
+  return AC;
+}
+function tone(freq, dur, type, vol, slideTo, when){
+  var a = ac(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (when || 0);
+    var o = a.createOscillator(), g = a.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(slideTo, 1), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.2, t0 + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(master);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }catch(e){}
+}
+function noiseBurst(dur, vol, f0, f1, type, when){
+  var a = ac(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (when || 0);
+    var len = Math.max(1, Math.floor(a.sampleRate * dur));
+    var buf = a.createBuffer(1, len, a.sampleRate);
     var d = buf.getChannelData(0);
-    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    return buf;
-  }
-  function sndPencil() { // škrábnutí tužky
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      var src = AC.createBufferSource(); src.buffer = noiseBuf(0.18);
-      var bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2100; bp.Q.value = 1.2;
-      var g = AC.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-      src.connect(bp); bp.connect(g); g.connect(AC.destination);
-      src.start(t);
-    } catch (e) {}
-  }
-  function sndBell() { // cinknutí zvonku
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      [1318, 1975, 2637].forEach(function (f, i) {
-        var o = AC.createOscillator(); o.type = "sine"; o.frequency.value = f;
-        var g = AC.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.12 / (i + 1), t + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
-        o.connect(g); g.connect(AC.destination);
-        o.start(t); o.stop(t + 0.85);
-      });
-    } catch (e) {}
-  }
-  function sndWarn() { // varovné zavrtění před výpadem
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      var o = AC.createOscillator(); o.type = "sawtooth";
-      o.frequency.setValueAtTime(170, t);
-      o.frequency.linearRampToValueAtTime(240, t + 0.12);
-      o.frequency.linearRampToValueAtTime(160, t + 0.24);
-      o.frequency.linearRampToValueAtTime(250, t + 0.38);
-      var g = AC.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
-      o.connect(g); g.connect(AC.destination);
-      o.start(t); o.stop(t + 0.5);
-    } catch (e) {}
-  }
-  function sndCrunch() { // tlumené křupnutí na konci
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      var src = AC.createBufferSource(); src.buffer = noiseBuf(0.22);
-      var lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 550;
-      var g = AC.createGain();
-      g.gain.setValueAtTime(0.3, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-      src.connect(lp); lp.connect(g); g.connect(AC.destination);
-      src.start(t);
-      var o = AC.createOscillator(); o.type = "sine";
-      o.frequency.setValueAtTime(120, t);
-      o.frequency.exponentialRampToValueAtTime(50, t + 0.2);
-      var g2 = AC.createGain();
-      g2.gain.setValueAtTime(0.2, t);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-      o.connect(g2); g2.connect(AC.destination);
-      o.start(t); o.stop(t + 0.25);
-    } catch (e) {}
-  }
-  function sndPop() { // had spolkl falešné jablko
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      var o = AC.createOscillator(); o.type = "triangle";
-      o.frequency.setValueAtTime(500, t);
-      o.frequency.exponentialRampToValueAtTime(180, t + 0.12);
-      var g = AC.createGain();
-      g.gain.setValueAtTime(0.14, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-      o.connect(g); g.connect(AC.destination);
-      o.start(t); o.stop(t + 0.16);
-    } catch (e) {}
-  }
-  function sndErase() { // guma
-    if (!AC || AC.state !== "running") return;
-    try {
-      var t = AC.currentTime;
-      var src = AC.createBufferSource(); src.buffer = noiseBuf(0.3);
-      var bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.8;
-      var g = AC.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.12, t + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-      src.connect(bp); bp.connect(g); g.connect(AC.destination);
-      src.start(t);
-    } catch (e) {}
-  }
+    for(var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    var src = a.createBufferSource(); src.buffer = buf;
+    var f = a.createBiquadFilter();
+    f.type = type || "bandpass";
+    f.frequency.setValueAtTime(f0, t0);
+    if(f1) f.frequency.exponentialRampToValueAtTime(Math.max(f1, 20), t0 + dur);
+    f.Q.value = 1.2;
+    var g = a.createGain();
+    g.gain.setValueAtTime(vol || 0.2, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.05);
+  }catch(e){}
+}
+function sScratch(){ noiseBurst(0.13, 0.3, 2200, 900); noiseBurst(0.09, 0.2, 1500, 700, "bandpass", 0.09); }
+function sWarn(){ tone(150, 0.09, "square", 0.16); tone(150, 0.09, "square", 0.16, 0, 0.13); tone(190, 0.12, "square", 0.18, 0, 0.26); }
+function sBell(){ tone(1318, 0.7, "sine", 0.22); tone(1760, 0.5, "sine", 0.12, 0, 0.02); tone(659, 0.35, "triangle", 0.1); }
+function sErase(){ noiseBurst(0.16, 0.3, 700, 350, "lowpass"); noiseBurst(0.14, 0.25, 650, 300, "lowpass", 0.14); }
+function sBlot(){ tone(320, 0.5, "sawtooth", 0.2, 85); tone(160, 0.5, "triangle", 0.14, 60, 0.05); }
+function sCrunch(){ noiseBurst(0.2, 0.5, 500, 120, "lowpass"); tone(95, 0.3, "square", 0.25, 38); }
+function sChomp(){ noiseBurst(0.08, 0.25, 900, 300, "lowpass"); tone(120, 0.1, "square", 0.12, 70); }
 
-  // ---------- velikost okna ----------
-  function bakePaper() {
-    paper = document.createElement("canvas");
-    paper.width = Math.max(1, Math.floor(W * DPR));
-    paper.height = Math.max(1, Math.floor(H * DPR));
-    var p = paper.getContext("2d");
-    p.setTransform(DPR, 0, 0, DPR, 0, 0);
-    p.fillStyle = COL_PAPER;
-    p.fillRect(0, 0, W, H);
-    p.strokeStyle = COL_GRID;
-    p.lineWidth = 1;
-    var step = 26;
-    p.beginPath();
-    for (var x = step; x < W; x += step) { p.moveTo(x + 0.5, 0); p.lineTo(x + 0.5, H); }
-    for (var y = step; y < H; y += step) { p.moveTo(0, y + 0.5); p.lineTo(W, y + 0.5); }
-    p.stroke();
-    // okraj stránky
-    p.strokeStyle = "rgba(224,122,110,0.55)";
-    p.lineWidth = 1.6;
-    p.beginPath(); p.moveTo(MARGIN_X + 0.5, 0); p.lineTo(MARGIN_X + 0.5, H); p.stroke();
-    // lehké zažloutnutí rohů
-    var gr = p.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
-    gr.addColorStop(0, "rgba(0,0,0,0)");
-    gr.addColorStop(1, "rgba(120,100,40,0.07)");
-    p.fillStyle = gr;
-    p.fillRect(0, 0, W, H);
-  }
+/* ============================== stav hry ============================== */
 
-  function clampAll() {
-    player.x = clamp(player.x, B + player.r, W - B - player.r);
-    player.y = clamp(player.y, B + player.r, H - B - player.r);
-    target.x = clamp(target.x, B, W - B);
-    target.y = clamp(target.y, B, H - B);
-    snake.x = clamp(snake.x, B, W - B);
-    snake.y = clamp(snake.y, B, H - B);
-    var i;
-    for (i = 0; i < fakes.length; i++) { fakes[i].x = clamp(fakes[i].x, B + 14, W - B - 14); fakes[i].y = clamp(fakes[i].y, B + 14, H - B - 14); }
-    for (i = 0; i < powerups.length; i++) { powerups[i].x = clamp(powerups[i].x, B + 16, W - B - 16); powerups[i].y = clamp(powerups[i].y, B + 16, H - B - 16); }
-    for (i = 0; i < blots.length; i++) { blots[i].x = clamp(blots[i].x, blots[i].r, W - blots[i].r); blots[i].y = clamp(blots[i].y, blots[i].r, H - blots[i].r); }
-  }
+var G = {
+  state: "menu",       // menu | play | pause | over
+  t: 0,
+  grace: 0,
+  best: 0,
+  newBest: false,
+  overCd: 0,
+  player: null,
+  snake: null,
+  fakes: [],
+  blots: [],
+  marks: [],
+  floats: [],
+  fakeTimer: 0,
+  markTimer: 0,
+  drawCd: 0,
+  glasses: 0,
+  overTime: 0,
+  shake: 0
+};
 
-  function resize() {
-    W = window.innerWidth || 800;
-    H = window.innerHeight || 600;
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.floor(W * DPR));
-    canvas.height = Math.max(1, Math.floor(H * DPR));
-    canvas.style.width = W + "px";
-    canvas.style.height = H + "px";
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    bakePaper();
-    clampAll();
-  }
-  window.addEventListener("resize", resize);
+function loadBest(){
+  try{
+    var v = window.localStorage.getItem("svacina_best");
+    if(v !== null){ var n = parseFloat(v); if(isFinite(n) && n > 0) G.best = n; }
+  }catch(e){}
+}
+function saveBest(){
+  try{ window.localStorage.setItem("svacina_best", String(G.best)); }catch(e){}
+}
 
-  // ---------- rozjezd kola ----------
-  function makeBlots() {
-    blots = [];
-    var want = Math.min(4, 2 + Math.floor(Math.random() * 3));
-    var guard = 0;
-    while (blots.length < want && guard < 300) {
-      guard++;
-      var r = 42 + Math.random() * 26;
-      var x = 120 + Math.random() * (W - 240);
-      var y = 120 + Math.random() * (H - 240);
-      if (W < 500) { x = 90 + Math.random() * (W - 180); }
-      if (H < 500) { y = 90 + Math.random() * (H - 180); }
-      var ok = dist(x, y, player.x, player.y) > 140 && dist(x, y, snake.x, snake.y) > 140;
-      for (var i = 0; i < blots.length && ok; i++) {
-        if (dist(x, y, blots[i].x, blots[i].y) < r + blots[i].r + 130) ok = false;
-      }
-      if (ok) blots.push({ x: x, y: y, r: r, seed: Math.random() * 1000 });
-    }
-  }
+function resetGame(){
+  G.t = 0;
+  G.grace = CFG.grace;
+  G.newBest = false;
+  G.glasses = 0;
+  G.shake = 0;
+  G.fakes = [];
+  G.marks = [];
+  G.floats = [];
+  G.fakeTimer = rnd(CFG.fakeAutoMin, CFG.fakeAutoMax) * 0.5;
+  G.markTimer = rnd(6, 10);
+  G.drawCd = 0;
 
-  function resetRound() {
-    elapsed = 0;
-    grace = 2;
-    newRecord = false;
-    finalGrade = null;
-    player.x = W * 0.5; player.y = H * 0.55;
-    player.vx = 0; player.vy = 0; player.rot = 0;
-    target.x = player.x; target.y = player.y;
-    keyboardActive = false;
-    pressPointer = false;
-
-    // had startuje v nejvzdálenějším rohu
-    var corners = [[B + 30, B + 30], [W - B - 30, B + 30], [B + 30, H - B - 30], [W - B - 30, H - B - 30]];
-    var best = corners[0], bd = -1;
-    for (var i = 0; i < 4; i++) {
-      var d = dist(corners[i][0], corners[i][1], player.x, player.y);
-      if (d > bd) { bd = d; best = corners[i]; }
-    }
-    snake.x = best[0]; snake.y = best[1];
-    snake.ang = Math.atan2(player.y - snake.y, player.x - snake.x);
-    snake.targetLen = 10;
-    snake.lunge = "none";
-    snake.lungeT = 0;
-    snake.nextLunge = 8 + Math.random() * 6;
-    snake.frozen = 0;
-    snake.closeT = 0;
-    snake.path = [];
-    var back = snake.ang + Math.PI;
-    var need = Math.ceil(snake.targetLen * SPACING / 4) + 4;
-    for (var j = need; j >= 0; j--) {
-      snake.path.push({ x: snake.x + Math.cos(back) * j * 4, y: snake.y + Math.sin(back) * j * 4 });
-    }
-    rebuildSegs();
-
-    fakes = [];
-    nextAutoFake = 8 + Math.random() * 4;
-    drawCd = 0;
-    powerups = [];
-    nextPower = 9 + Math.random() * 7;
-    makeBlots();
-  }
-
-  function startGame() {
-    resetRound();
-    state = "play";
-  }
-
-  function gameOver() {
-    state = "over";
-    overAt = nowSec;
-    sndCrunch();
-    finalGrade = gradeFor(elapsed);
-    if (bestTime === null || elapsed > bestTime) {
-      bestTime = elapsed;
-      newRecord = true;
-      lsSet("svacina_best", String(Math.floor(elapsed * 10) / 10));
-    }
-  }
-
-  function fmtSec(t) { return String(Math.floor(t * 10) / 10).replace(".", ","); }
-
-  function gradeFor(t) {
-    if (t < 15) return { g: "5", c: "Sežrán dřív, než dozněl zvonek. Zítra dvě svačiny!" };
-    if (t < 30) return { g: "4", c: "Snaha byla, ale had se ani nezadýchal." };
-    if (t < 60) return { g: "3", c: "Slušný útěk. Na jedničku to ale nestačí." };
-    if (t < 120) return { g: "2", c: "Skoro mistr úniku. Hadovi kručelo v břiše." };
-    return { g: "1", c: "Výborně! Had zůstal o hladu. Jednička s hvězdičkou." };
-  }
-
-  // ---------- had: tělo podle cesty ----------
-  function rebuildSegs() {
-    var p = snake.path;
-    var segs = [{ x: snake.x, y: snake.y }];
-    var needDist = SPACING;
-    var px = snake.x, py = snake.y;
-    for (var i = p.length - 1; i >= 0 && segs.length < snake.targetLen; i--) {
-      var qx = p[i].x, qy = p[i].y;
-      var d = dist(px, py, qx, qy);
-      while (d >= needDist && segs.length < snake.targetLen) {
-        var t = needDist / d;
-        px = px + (qx - px) * t;
-        py = py + (qy - py) * t;
-        segs.push({ x: px, y: py });
-        d = dist(px, py, qx, qy);
-        needDist = SPACING;
-      }
-      if (d < needDist) { needDist -= d; px = qx; py = qy; }
-    }
-    snake.segs = segs;
-  }
-
-  function trimPath() {
-    var p = snake.path;
-    var maxLen = snake.targetLen * SPACING + 80;
-    var total = 0;
-    for (var i = p.length - 1; i > 0; i--) {
-      total += dist(p[i].x, p[i].y, p[i - 1].x, p[i - 1].y);
-      if (total > maxLen) { p.splice(0, i); return; }
-    }
-  }
-
-  // ---------- update ----------
-  function inBlot(x, y) {
-    for (var i = 0; i < blots.length; i++) {
-      if (dist(x, y, blots[i].x, blots[i].y) < blots[i].r * 0.92) return true;
-    }
-    return false;
-  }
-
-  function updatePlayer(dt) {
-    var ACCEL = 1400, MAXV = 345, DRAG = 2.0;
-    var slowed = inBlot(player.x, player.y);
-    var acc = slowed ? ACCEL * 0.4 : ACCEL;
-    var maxv = slowed ? MAXV * 0.36 : MAXV;
-    var drag = slowed ? 4.5 : DRAG;
-
-    var ax = 0, ay = 0;
-    var kx = 0, ky = 0;
-    if (keys.ArrowLeft || keys.KeyA) kx -= 1;
-    if (keys.ArrowRight || keys.KeyD) kx += 1;
-    if (keys.ArrowUp || keys.KeyW) ky -= 1;
-    if (keys.ArrowDown || keys.KeyS) ky += 1;
-    if (keyboardActive && (kx !== 0 || ky !== 0)) {
-      var kl = Math.sqrt(kx * kx + ky * ky);
-      ax = kx / kl * acc; ay = ky / kl * acc;
-    } else if (!keyboardActive) {
-      var dx = target.x - player.x, dy = target.y - player.y;
-      var d = Math.sqrt(dx * dx + dy * dy);
-      if (d > 5) {
-        var sc = clamp(d / 70, 0.2, 1);
-        ax = dx / d * acc * sc; ay = dy / d * acc * sc;
-      }
-    }
-    player.vx += ax * dt;
-    player.vy += ay * dt;
-    player.vx -= player.vx * drag * dt;
-    player.vy -= player.vy * drag * dt;
-    var sp = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
-    if (sp > maxv) { player.vx *= maxv / sp; player.vy *= maxv / sp; sp = maxv; }
-    player.x += player.vx * dt;
-    player.y += player.vy * dt;
-    // stěny
-    if (player.x < B + player.r) { player.x = B + player.r; player.vx = Math.abs(player.vx) * 0.25; }
-    if (player.x > W - B - player.r) { player.x = W - B - player.r; player.vx = -Math.abs(player.vx) * 0.25; }
-    if (player.y < B + player.r) { player.y = B + player.r; player.vy = Math.abs(player.vy) * 0.25; }
-    if (player.y > H - B - player.r) { player.y = H - B - player.r; player.vy = -Math.abs(player.vy) * 0.25; }
-    // koulení
-    var dirSign = (Math.abs(player.vx) > Math.abs(player.vy) ? (player.vx >= 0 ? 1 : -1) : (player.vy >= 0 ? 1 : -1));
-    player.rot += dirSign * (sp / player.r) * dt;
-  }
-
-  function snakeTarget() {
-    var tx = player.x, ty = player.y;
-    var bd = dist(snake.x, snake.y, player.x, player.y);
-    var which = -1;
-    for (var i = 0; i < fakes.length; i++) {
-      var d = dist(snake.x, snake.y, fakes[i].x, fakes[i].y);
-      if (d < bd) { bd = d; tx = fakes[i].x; ty = fakes[i].y; which = i; }
-    }
-    return { x: tx, y: ty, d: bd, fake: which };
-  }
-
-  function updateSnake(dt) {
-    if (snake.frozen > 0) { snake.frozen -= dt; return; }
-
-    // na menším displeji je aréna těsnější — had jede úměrně pomaleji
-    var sizeK = clamp(Math.sqrt(W * H) / 900, 0.78, 1);
-    var spd = Math.min(125 + elapsed * 1.5, 290) * sizeK;
-    var tgt = snakeTarget();
-
-    // výpady
-    if (snake.lunge === "none") {
-      snake.nextLunge -= dt;
-      if (snake.nextLunge <= 0) {
-        snake.lunge = "windup";
-        snake.lungeT = 0.5;
-        sndWarn();
-      }
-    } else if (snake.lunge === "windup") {
-      snake.lungeT -= dt;
-      if (snake.lungeT <= 0) {
-        snake.lunge = "sprint";
-        snake.lungeT = 1.0;
-        snake.lungeAng = Math.atan2(tgt.y - snake.y, tgt.x - snake.x);
-        snake.ang = snake.lungeAng;
-      }
-    } else if (snake.lunge === "sprint") {
-      snake.lungeT -= dt;
-      if (snake.lungeT <= 0) {
-        snake.lunge = "none";
-        snake.nextLunge = 8 + Math.random() * 6;
-        snake.closeT = 0;
-      }
-    }
-
-    var eff = spd;
-    if (snake.lunge === "sprint") {
-      eff = Math.min(spd * 2.3, 640);
-      // sprint: rovně, bez zatáčení
-    } else {
-      // sledování cíle: blíž = ostřejší zatáčka, NIKDY pomaleji
-      var closeF = clamp(1 - tgt.d / 180, 0, 1);
-      var turn = (2.3 + spd * 0.011) * (1 + 3.2 * closeF);
-      // poslední záchrana proti věčnému kroužení
-      if (tgt.d < 180) snake.closeT += dt; else snake.closeT = Math.max(0, snake.closeT - dt * 2);
-      if (snake.closeT > 3) { eff = spd * 0.55; turn *= 1.6; }
-      var want = Math.atan2(tgt.y - snake.y, tgt.x - snake.x);
-      var dAng = angDiff(snake.ang, want);
-      snake.ang += clamp(dAng, -turn * dt, turn * dt);
-      if (snake.lunge === "windup") eff = spd * 0.85;
-    }
-
-    snake.x += Math.cos(snake.ang) * eff * dt;
-    snake.y += Math.sin(snake.ang) * eff * dt;
-    snake.x = clamp(snake.x, B, W - B);
-    snake.y = clamp(snake.y, B, H - B);
-
-    snake.path.push({ x: snake.x, y: snake.y });
-    trimPath();
-    rebuildSegs();
-
-    // sežrání falešného jablka
-    for (var i = fakes.length - 1; i >= 0; i--) {
-      if (dist(snake.x, snake.y, fakes[i].x, fakes[i].y) < 20) {
-        fakes.splice(i, 1);
-        snake.targetLen += 4;
-        snake.closeT = 0;
-        sndPop();
-      }
-    }
-
-    // kolize s hráčem — smrtící je CELÉ tělo
-    if (grace <= 0 && state === "play") {
-      var killR = (SEG_R + player.r) * 0.72;
-      var headR = (SEG_R + 3 + player.r) * 0.72;
-      for (var s = 0; s < snake.segs.length; s++) {
-        var rr = s === 0 ? headR : killR;
-        if (dist(snake.segs[s].x, snake.segs[s].y, player.x, player.y) < rr) {
-          gameOver();
-          return;
-        }
-      }
-    }
-  }
-
-  function spawnFake(x, y) {
-    fakes.push({ x: clamp(x, B + 14, W - B - 14), y: clamp(y, B + 14, H - B - 14), seed: Math.random() * 1000 });
-    sndPencil();
-  }
-
-  function updateFakes(dt) {
-    if (drawCd > 0) drawCd -= dt;
-    nextAutoFake -= dt;
-    if (nextAutoFake <= 0) {
-      if (fakes.length < 2) {
-        var guard = 0, x, y, ok = false;
-        while (!ok && guard < 60) {
-          guard++;
-          x = B + 30 + Math.random() * (W - 2 * B - 60);
-          y = B + 30 + Math.random() * (H - 2 * B - 60);
-          ok = dist(x, y, snake.x, snake.y) > 110 && dist(x, y, player.x, player.y) > 70;
-        }
-        if (ok) spawnFake(x, y);
-        nextAutoFake = 8 + Math.random() * 4;
-      } else {
-        nextAutoFake = 2.5;
-      }
-    }
-  }
-
-  function updatePowerups(dt) {
-    nextPower -= dt;
-    if (nextPower <= 0) {
-      if (powerups.length < 2) {
-        var guard = 0, x, y, ok = false;
-        while (!ok && guard < 60) {
-          guard++;
-          x = B + 34 + Math.random() * (W - 2 * B - 68);
-          y = B + 34 + Math.random() * (H - 2 * B - 68);
-          ok = dist(x, y, snake.x, snake.y) > 120 && dist(x, y, player.x, player.y) > 90 && !inBlot(x, y);
-        }
-        if (ok) powerups.push({ x: x, y: y, type: Math.random() < 0.5 ? "guma" : "zvonek", life: 8, seed: Math.random() * 1000 });
-      }
-      nextPower = 10 + Math.random() * 8;
-    }
-    for (var i = powerups.length - 1; i >= 0; i--) {
-      var p = powerups[i];
-      p.life -= dt;
-      if (p.life <= 0) { powerups.splice(i, 1); continue; }
-      if (dist(p.x, p.y, player.x, player.y) < player.r + 15) {
-        if (p.type === "guma") {
-          snake.targetLen = Math.max(6, snake.targetLen - 5);
-          sndErase();
-        } else {
-          snake.frozen = 2;
-          sndBell();
-        }
-        powerups.splice(i, 1);
-      }
-    }
-  }
-
-  function update(dt) {
-    elapsed += dt;
-    if (grace > 0) grace -= dt;
-    updatePlayer(dt);
-    updateFakes(dt);
-    updatePowerups(dt);
-    updateSnake(dt);
-  }
-
-  // ---------- kreslení: roztřesené čáry ----------
-  function scribbleCircle(x, y, r, seed, color, lw, passes, alpha) {
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
-    for (var p = 0; p < passes; p++) {
-      ctx.lineWidth = lw + wob(seed + p * 7, 99, lw * 0.3);
-      ctx.beginPath();
-      var n = 16;
-      var a0 = h1(seed + p) * Math.PI * 2;
-      for (var i = 0; i <= n + 1; i++) {
-        var a = a0 + (i / n) * Math.PI * 2.08;
-        var rr = r + wob(seed + p * 31, i, r * 0.13);
-        var px = x + Math.cos(a) * rr;
-        var py = y + Math.sin(a) * rr;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function scribbleLine(x1, y1, x2, y2, seed, color, lw, amp) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lw + wob(seed, 88, lw * 0.25);
-    ctx.beginPath();
-    var n = 6;
-    for (var i = 0; i <= n; i++) {
-      var t = i / n;
-      var px = x1 + (x2 - x1) * t + wob(seed, i, amp);
-      var py = y1 + (y2 - y1) * t + wob(seed + 5, i, amp);
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-
-  function note(text, x, y, size, rot, color, align) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot || 0);
-    ctx.fillStyle = color || COL_RED;
-    ctx.font = size + "px " + HAND;
-    ctx.textAlign = align || "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 0, 0);
-    ctx.restore();
-  }
-
-  // ---------- kreslení objektů ----------
-  function drawPlayer() {
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    if (grace > 0 && state === "play") {
-      // ochranná lhůta: přerušovaný kroužek + blikání
-      ctx.globalAlpha = 0.35 + 0.25 * Math.sin(nowSec * 14);
-      ctx.strokeStyle = COL_RED2;
-      ctx.lineWidth = 1.6;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.arc(0, 0, player.r + 8 + wob(3, 1, 1.4), 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
-    ctx.rotate(player.rot);
-    scribbleCircle(0, 0, player.r, 11, COL_RED, 2.4, 2);
-    // detail slupky, ať je vidět rotace
-    ctx.strokeStyle = COL_RED2;
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(0, 0, player.r * 0.55, 0.4 + wob(15, 0, 0.2), 1.7 + wob(15, 1, 0.2));
-    ctx.stroke();
-    ctx.fillStyle = COL_RED;
-    ctx.beginPath();
-    ctx.arc(player.r * 0.45, -player.r * 0.2, 2.1, 0, Math.PI * 2);
-    ctx.fill();
-    // stopka + lísteček
-    scribbleLine(0, -player.r, 2, -player.r - 7, 21, "#7a4a24", 2, 1);
-    ctx.strokeStyle = "#4b7a3a";
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.ellipse(6, -player.r - 5 + wob(22, 0, 1), 5, 2.6, 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawFake(f) {
-    ctx.save();
-    ctx.translate(f.x, f.y);
-    scribbleCircle(0, 0, 11, f.seed, COL_PENCIL, 1.7, 2, 0.9);
-    // šrafování tužkou
-    ctx.strokeStyle = COL_PENCIL;
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 1;
-    for (var i = 0; i < 4; i++) {
-      var o = -7 + i * 4.4;
-      scribbleLine(o - 3, -o * 0.4 - 4, o + 4, -o * 0.4 + 6, f.seed + i * 3, COL_PENCIL, 1, 0.9);
-    }
-    ctx.globalAlpha = 1;
-    scribbleLine(0, -11, 1, -17, f.seed + 44, COL_PENCIL, 1.4, 0.8);
-    ctx.restore();
-  }
-
-  function drawPowerup(p) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    var blink = p.life < 2 ? (Math.sin(nowSec * 16) > 0 ? 0.25 : 1) : 1;
-    ctx.globalAlpha = blink;
-    if (p.type === "guma") {
-      ctx.save();
-      ctx.rotate(-0.3 + wob(p.seed, 0, 0.05));
-      ctx.strokeStyle = COL_PENCIL;
-      ctx.lineWidth = 1.8;
-      ctx.strokeRect(-13 + wob(p.seed, 1, 1), -8 + wob(p.seed, 2, 1), 26, 16);
-      scribbleLine(-5, -8, -5, 8, p.seed + 9, COL_PENCIL, 1.2, 0.8);
-      ctx.restore();
-      note("GUMA", 0, 20, 11, 0, COL_PENCIL, "center");
-    } else {
-      ctx.strokeStyle = COL_PENCIL;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(0 + wob(p.seed, 0, 0.8), -2, 10, Math.PI, 0);
-      ctx.lineTo(12 + wob(p.seed, 1, 0.8), 6);
-      ctx.lineTo(-12 + wob(p.seed, 2, 0.8), 6);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(wob(p.seed, 3, 0.8), 9.5, 2.4, 0, Math.PI * 2);
-      ctx.stroke();
-      note("ZVONEK", 0, 22, 11, 0, COL_PENCIL, "center");
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  function drawBlot(bl) {
-    ctx.save();
-    ctx.translate(bl.x, bl.y);
-    ctx.fillStyle = COL_INK;
-    ctx.globalAlpha = 0.88;
-    ctx.beginPath();
-    var n = 14;
-    for (var i = 0; i <= n; i++) {
-      var a = (i / n) * Math.PI * 2;
-      var rr = bl.r * (0.72 + 0.3 * h1(bl.seed + i * 3.1)) + wob(bl.seed, i, 2);
-      var px = Math.cos(a) * rr;
-      var py = Math.sin(a) * rr;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fill();
-    // kapičky
-    for (var k = 0; k < 3; k++) {
-      var aa = h1(bl.seed + 50 + k) * Math.PI * 2;
-      var dd = bl.r * (1.05 + 0.3 * h1(bl.seed + 60 + k));
-      ctx.beginPath();
-      ctx.arc(Math.cos(aa) * dd, Math.sin(aa) * dd, 2.5 + 3 * h1(bl.seed + 70 + k), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  function drawSnake() {
-    var segs = snake.segs;
-    var wig = 0;
-    if (snake.lunge === "windup") wig = 2.6;
-    for (var i = segs.length - 1; i >= 1; i--) {
-      var s = segs[i];
-      var r = SEG_R + (i % 2 === 0 ? 0.8 : -0.4);
-      scribbleCircle(s.x, s.y, r, 200 + i * 3, COL_BLUE, 2, 1, 0.95);
-    }
-    // hlava
-    var hx = snake.x + (wig ? wob(500, Math.floor(nowSec * 30), wig) : 0);
-    var hy = snake.y + (wig ? wob(501, Math.floor(nowSec * 30), wig) : 0);
-    scribbleCircle(hx, hy, SEG_R + 3.5, 300, COL_BLUE, 2.6, 2);
-    // oči
-    var ea = snake.ang;
-    ctx.fillStyle = COL_BLUE;
-    ctx.beginPath();
-    ctx.arc(hx + Math.cos(ea - 0.55) * 6.5, hy + Math.sin(ea - 0.55) * 6.5, 1.9, 0, Math.PI * 2);
-    ctx.arc(hx + Math.cos(ea + 0.55) * 6.5, hy + Math.sin(ea + 0.55) * 6.5, 1.9, 0, Math.PI * 2);
-    ctx.fill();
-    // jazyk při výpadu / sprintu
-    if (snake.lunge !== "none") {
-      var tx = hx + Math.cos(ea) * (SEG_R + 4);
-      var ty = hy + Math.sin(ea) * (SEG_R + 4);
-      scribbleLine(tx, ty, tx + Math.cos(ea) * 10, ty + Math.sin(ea) * 10, 320, COL_RED2, 1.6, 1.2);
-    }
-    // zmrzlý: zzz
-    if (snake.frozen > 0) {
-      note("Zzz", hx + 14, hy - 16, 15, -0.15, COL_PENCIL, "left");
-    }
-  }
-
-  function drawDoodles() {
-    // stopy života na okrajích — tužkou/propiskou, boiling
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    // piškvorky vlevo nahoře
-    var gx = 8, gy = 46, cs = 11;
-    var i;
-    for (i = 1; i <= 2; i++) {
-      scribbleLine(gx + cs * i, gy, gx + cs * i, gy + cs * 3, 601 + i, COL_PENCIL, 1, 0.7);
-      scribbleLine(gx, gy + cs * i, gx + cs * 3, gy + cs * i, 611 + i, COL_PENCIL, 1, 0.7);
-    }
-    scribbleLine(gx + 2, gy + 2, gx + cs - 2, gy + cs - 2, 621, COL_PENCIL, 1, 0.5);
-    scribbleLine(gx + cs - 2, gy + 2, gx + 2, gy + cs - 2, 622, COL_PENCIL, 1, 0.5);
-    scribbleCircle(gx + cs * 1.5, gy + cs * 1.5, 4, 623, COL_BLUE, 1, 1, 0.8);
-    scribbleLine(gx + 2 + cs * 2, gy + 2 + cs * 2, gx + cs - 2 + cs * 2, gy + cs - 2 + cs * 2, 624, COL_PENCIL, 1, 0.5);
-    scribbleLine(gx + cs - 2 + cs * 2, gy + 2 + cs * 2, gx + 2 + cs * 2, gy + cs - 2 + cs * 2, 625, COL_PENCIL, 1, 0.5);
-    // srdíčko vlevo dole
-    ctx.strokeStyle = COL_RED2;
-    ctx.lineWidth = 1.4;
-    var hx2 = 22, hy2 = H - 60;
-    ctx.beginPath();
-    ctx.moveTo(hx2, hy2 + 3 + wob(630, 0, 0.7));
-    ctx.bezierCurveTo(hx2 - 9, hy2 - 6 + wob(630, 1, 0.7), hx2 - 3, hy2 - 13, hx2, hy2 - 6);
-    ctx.bezierCurveTo(hx2 + 3, hy2 - 13, hx2 + 9, hy2 - 6 + wob(630, 2, 0.7), hx2, hy2 + 3 + wob(630, 0, 0.7));
-    ctx.stroke();
-    // zaškrtaná slovíčka vpravo nahoře
-    if (W > 560) {
-      note("die Schlange", W - 16, 30, 12, -0.04, COL_PENCIL, "right");
-      scribbleLine(W - 100, 30, W - 16, 32, 640, COL_PENCIL, 1.2, 1.2);
-      note("der Apfel", W - 16, 48, 12, 0.03, COL_PENCIL, "right");
-      scribbleLine(W - 88, 48, W - 16, 47, 641, COL_PENCIL, 1.2, 1.2);
-    }
-    // malá kaňka vpravo dole
-    ctx.fillStyle = COL_INK;
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath();
-    ctx.arc(W - 26 + wob(650, 0, 0.5), H - 26, 5, 0, Math.PI * 2);
-    ctx.arc(W - 18, H - 32, 2.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawPencilUI() {
-    // kreslení falešného jablka — ikonka tužky s kroužkem cooldownu
-    var cx = W - 46, cy = H - 66;
-    if (H < 500) { cy = H - 46; }
-    var ready = drawCd <= 0;
-    ctx.save();
-    ctx.globalAlpha = ready ? 1 : 0.6;
-    // kroužek průběhu
-    ctx.strokeStyle = ready ? COL_RED : COL_PENCIL;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    var frac = ready ? 1 : 1 - drawCd / DRAW_CD;
-    ctx.arc(cx, cy, 22, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
-    ctx.stroke();
-    if (ready) {
-      ctx.globalAlpha = 0.25 + 0.15 * Math.sin(nowSec * 5);
-      ctx.beginPath();
-      ctx.arc(cx, cy, 26, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    // tužka
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(-0.7);
-    ctx.strokeStyle = "#6f6f6f";
-    ctx.lineWidth = 1.8;
-    ctx.strokeRect(-4 + wob(700, 0, 0.4), -12, 8, 18);
-    ctx.beginPath();
-    ctx.moveTo(-4, 6); ctx.lineTo(0, 13); ctx.lineTo(4, 6);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-1.4, 10.5); ctx.lineTo(0, 13); ctx.lineTo(1.4, 10.5);
-    ctx.stroke();
-    ctx.restore();
-    ctx.globalAlpha = 1;
-    note(ready ? "kresli!" : Math.ceil(drawCd) + " s", cx, cy + 38, 12, -0.05, ready ? COL_RED : COL_PENCIL, "center");
-    ctx.restore();
-  }
-
-  function drawHUD() {
-    note("Čas: " + Math.floor(elapsed) + " s", W - 18, 76, 20, -0.03, COL_RED, "right");
-    if (bestTime !== null) {
-      note("rekord: " + Math.floor(bestTime) + " s", W - 18, 98, 12, -0.02, COL_RED2, "right");
-    }
-    drawPencilUI();
-    if (grace > 0) {
-      note("ochranná lhůta…", player.x, player.y - 34, 13, -0.03, COL_RED2, "center");
-    }
-  }
-
-  function overlayWash(alpha) {
-    ctx.fillStyle = "rgba(251,249,238," + alpha + ")";
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  function drawTitleApple(x, y, s) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(s, s);
-    scribbleCircle(0, 0, 13, 11, COL_RED, 2.4, 2);
-    scribbleLine(0, -13, 2, -20, 21, "#7a4a24", 2, 1);
-    ctx.strokeStyle = "#4b7a3a";
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.ellipse(6, -18 + wob(22, 0, 1), 5, 2.6, 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawMenu() {
-    overlayWash(0.55);
-    var cx = W / 2, cy = H * 0.34;
-    var big = Math.min(64, W * 0.13);
-    note("SVAČINA", cx, cy, big, -0.02, COL_RED, "center");
-    scribbleLine(cx - big * 2.1, cy + big * 0.55, cx + big * 2.1, cy + big * 0.62, 801, COL_RED, 2.5, 2.5);
-    note("Jsi svačina. Uteč hadovi.", cx, cy + big * 1.25, Math.min(24, W * 0.05), 0.01, COL_INK, "center");
-    if (W > 620) drawTitleApple(cx - big * 3.6, cy - 6, 1.2);
-    var ly = cy + big * 1.25 + 46;
-    var fs = Math.min(15, W * 0.036);
-    note("Myš nebo prst: jablko se koulí za kurzorem — pozor, klouže!", cx, ly, fs, 0, COL_PENCIL, "center");
-    note("Klik / ťuknutí: nakreslíš falešné jablko a hada napálíš.", cx, ly + 22, fs, 0, COL_PENCIL, "center");
-    note("Šipky nebo WASD fungují taky.", cx, ly + 44, fs, 0, COL_PENCIL, "center");
-    var blink = 0.55 + 0.45 * Math.sin(nowSec * 3);
-    ctx.globalAlpha = blink;
-    note("Klikni nebo stiskni mezerník", cx, ly + 86, Math.min(20, W * 0.045), -0.01, COL_RED, "center");
-    ctx.globalAlpha = 1;
-  }
-
-  function drawPausedOverlay() {
-    overlayWash(0.7);
-    note("PŘESTÁVKA", W / 2, H * 0.42, Math.min(44, W * 0.1), -0.02, COL_RED, "center");
-    note("Hra je pozastavená.", W / 2, H * 0.42 + 44, 16, 0, COL_INK, "center");
-    var blink = 0.55 + 0.45 * Math.sin(nowSec * 3);
-    ctx.globalAlpha = blink;
-    note("Klikni nebo stiskni klávesu pro pokračování", W / 2, H * 0.42 + 80, 16, 0, COL_RED, "center");
-    ctx.globalAlpha = 1;
-  }
-
-  function drawOver() {
-    overlayWash(0.72);
-    var cx = W / 2;
-    var g = finalGrade || gradeFor(elapsed);
-    note("KŘUP! Sežráno.", cx, H * 0.2, Math.min(34, W * 0.08), -0.015, COL_INK, "center");
-    note("Přežil jsi " + fmtSec(elapsed) + " s", cx, H * 0.2 + 40, 18, 0, COL_INK, "center");
-    // známka — červeně zakroužkovaná
-    var gy = H * 0.45;
-    var gs = Math.min(88, W * 0.2);
-    note(g.g, cx, gy, gs, -0.05, COL_RED, "center");
-    ctx.save();
-    ctx.translate(cx, gy);
-    ctx.strokeStyle = COL_RED;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    var n = 18;
-    var a0 = h1(901) * Math.PI * 2;
-    for (var i = 0; i <= n + 2; i++) {
-      var a = a0 + (i / n) * Math.PI * 2.15;
-      var rx = gs * 0.62 + wob(902, i, 5);
-      var ry = gs * 0.52 + wob(903, i, 5);
-      var px = Math.cos(a) * rx;
-      var py = Math.sin(a) * ry;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-    ctx.restore();
-    var fs = Math.min(17, W * 0.04);
-    note(g.c, cx, gy + gs * 0.75 + 22, fs, -0.01, COL_RED, "center");
-    if (bestTime !== null) {
-      note("Nejlepší čas: " + fmtSec(bestTime) + " s" + (newRecord ? "  — nový rekord!" : ""), cx, gy + gs * 0.75 + 52, fs, 0, COL_INK, "center");
-    }
-    if (nowSec - overAt > 0.6) {
-      var blink = 0.55 + 0.45 * Math.sin(nowSec * 3);
-      ctx.globalAlpha = blink;
-      note("Klikni nebo stiskni mezerník — nová hodina", cx, gy + gs * 0.75 + 92, fs + 1, 0, COL_RED, "center");
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  function render() {
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (paper) ctx.drawImage(paper, 0, 0, W, H);
-    drawDoodles();
-    var i;
-    for (i = 0; i < blots.length; i++) drawBlot(blots[i]);
-    if (state === "play" || state === "paused" || state === "over") {
-      for (i = 0; i < fakes.length; i++) drawFake(fakes[i]);
-      for (i = 0; i < powerups.length; i++) drawPowerup(powerups[i]);
-      drawSnake();
-      if (state !== "over") drawPlayer();
-    }
-    if (state === "play") drawHUD();
-    if (state === "menu") drawMenu();
-    if (state === "paused") drawPausedOverlay();
-    if (state === "over") drawOver();
-  }
-
-  // ---------- vstup ----------
-  function ptFromEvent(e) {
-    var r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  }
-
-  canvas.addEventListener("pointermove", function (e) {
-    var p = ptFromEvent(e);
-    target.x = clamp(p.x, B, W - B);
-    target.y = clamp(p.y, B, H - B);
-    keyboardActive = false;
-  });
-
-  canvas.addEventListener("pointerdown", function (e) {
-    ensureAudio();
-    var p = ptFromEvent(e);
-    pdown.x = p.x; pdown.y = p.y; pdown.t = nowSec; pdown.state = state;
-    if (state === "menu") { startGame(); return; }
-    if (state === "paused") { state = "play"; return; }
-    if (state === "over") {
-      if (nowSec - overAt > 0.6) startGame();
-      return;
-    }
-    if (state === "play") {
-      target.x = clamp(p.x, B, W - B);
-      target.y = clamp(p.y, B, H - B);
-      keyboardActive = false;
-      pressPointer = true;
-    }
-  });
-
-  canvas.addEventListener("pointerup", function (e) {
-    var p = ptFromEvent(e);
-    if (state === "play" && pdown.state === "play" && pressPointer) {
-      var moved = dist(p.x, p.y, pdown.x, pdown.y);
-      var held = nowSec - pdown.t;
-      if (moved < 12 && held < 0.3 && drawCd <= 0) {
-        spawnFake(p.x, p.y);
-        drawCd = DRAW_CD;
-      }
-    }
-    pressPointer = false;
-  });
-
-  canvas.addEventListener("pointercancel", function () { pressPointer = false; });
-  canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
-
-  var MOVE_KEYS = { ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, KeyA: 1, KeyD: 1, KeyW: 1, KeyS: 1 };
-  window.addEventListener("keydown", function (e) {
-    ensureAudio();
-    if (MOVE_KEYS[e.code]) {
-      keys[e.code] = true;
-      keyboardActive = true;
-      e.preventDefault();
-      if (state === "paused") state = "play";
-      return;
-    }
-    if (e.code === "Space" || e.code === "Enter") {
-      e.preventDefault();
-      if (state === "menu") startGame();
-      else if (state === "paused") state = "play";
-      else if (state === "over" && nowSec - overAt > 0.6) startGame();
-    } else if (state === "paused") {
-      state = "play";
-    }
-  });
-  window.addEventListener("keyup", function (e) {
-    if (MOVE_KEYS[e.code]) { keys[e.code] = false; }
-  });
-
-  function pauseIfPlaying() {
-    if (state === "play") { state = "paused"; pressPointer = false; }
-  }
-  window.addEventListener("blur", pauseIfPlaying);
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden) pauseIfPlaying();
-  });
-
-  // ---------- smyčka ----------
-  var tPrev = 0;
-  function frame(ts) {
-    window.requestAnimationFrame(frame);
-    if (!tPrev) tPrev = ts;
-    var dt = Math.min((ts - tPrev) / 1000, 0.05);
-    tPrev = ts;
-    nowSec = ts / 1000;
-    boil = Math.floor(ts / 130) % 3;
-    if (state === "play") update(dt);
-    render();
-  }
-
-  resize();
-  resetRound();
-  window.requestAnimationFrame(frame);
-
-  // ladicí háček (neškodný, pro testy)
-  window.__svacina = {
-    get state() { return state; },
-    get elapsed() { return elapsed; },
-    get bestTime() { return bestTime; },
-    player: player, snake: snake, target: target,
-    get fakes() { return fakes; },
-    get powerups() { return powerups; },
-    get blots() { return blots; },
-    start: startGame
+  var px = W * 0.5, py = H * 0.62;
+  G.player = {
+    x: px, y: py, vx: 0, vy: 0, rot: 0,
+    tx: px, ty: py, hasTarget: false
   };
+
+  // had startuje v rohu nejdal od hrace
+  var corners = [[70,70],[W-70,70],[70,H-70],[W-70,H-70]];
+  var bi = 0, bd = -1;
+  for(var i = 0; i < 4; i++){
+    var d = dist(corners[i][0], corners[i][1], px, py);
+    if(d > bd){ bd = d; bi = i; }
+  }
+  var hx = corners[bi][0], hy = corners[bi][1];
+  var heading = Math.atan2(py - hy, px - hx);
+  var snake = {
+    x: hx, y: hy, heading: heading,
+    segs: [], path: [], pathLen: 0,
+    lungeT: rnd(CFG.lungeMin, CFG.lungeMax),
+    phase: "none", phaseT: 0,
+    freeze: 0, brake: 0, closeT: 0,
+    targetX: px, targetY: py, targetIsFake: false
+  };
+  // predvyplnit cestu dozadu, aby telo bylo videt hned
+  var backA = heading + Math.PI;
+  var need = CFG.spacing * (CFG.startLen + 3);
+  var steps = Math.ceil(need / 4);
+  for(var s = 0; s <= steps; s++){
+    snake.path.push({ x: hx + Math.cos(backA) * s * 4, y: hy + Math.sin(backA) * s * 4 });
+    if(s > 0) snake.pathLen += 4;
+  }
+  for(var k = 0; k < CFG.startLen; k++) snake.segs.push({ x: hx, y: hy });
+  G.snake = snake;
+  updateSegments();
+
+  makeBlots();
+}
+
+function makeBlots(){
+  G.blots = [];
+  var count = 2 + Math.floor(Math.random() * 3); // 2-4
+  var margin = Math.min(140, Math.min(W, H) * 0.18);
+  var gap = 190;
+  var tries = 0;
+  while(G.blots.length < count && tries < 900){
+    tries++;
+    if(tries % 150 === 0) gap = Math.max(50, gap - 45); // kdyz se nedari, uvolnit rozestupy
+    var r = rnd(42, 68);
+    if(W - 2 * (margin + r) < 20 || H - 2 * (margin + r) < 20) r = 40;
+    var x = rnd(margin + r, Math.max(margin + r + 1, W - margin - r));
+    var y = rnd(margin + r, Math.max(margin + r + 1, H - margin - r));
+    if(!(isFinite(x) && isFinite(y))) break;
+    var ok = true;
+    for(var i = 0; i < G.blots.length; i++){
+      if(dist(x, y, G.blots[i].x, G.blots[i].y) < r + G.blots[i].r + gap){ ok = false; break; }
+    }
+    if(ok && G.player && dist(x, y, G.player.x, G.player.y) < r + 140) ok = false;
+    if(ok && G.snake && dist(x, y, G.snake.x, G.snake.y) < r + 120) ok = false;
+    if(ok){
+      var blob = { x: x, y: y, r: r, seed: Math.random() * 1000, pts: [] };
+      var n = 14;
+      for(var p = 0; p < n; p++){
+        blob.pts.push(0.72 + Math.random() * 0.42);
+      }
+      G.blots.push(blob);
+    }
+  }
+}
+
+/* ============================== update ============================== */
+
+function inBlot(x, y){
+  for(var i = 0; i < G.blots.length; i++){
+    var b = G.blots[i];
+    if(dist(x, y, b.x, b.y) < b.r * 0.92) return true;
+  }
+  return false;
+}
+
+var keys = {};
+var keySteering = false;
+
+function updatePlayer(dt){
+  var p = G.player;
+  var ax = 0, ay = 0;
+  var kx = 0, ky = 0;
+  if(keys["ArrowLeft"] || keys["KeyA"]) kx -= 1;
+  if(keys["ArrowRight"] || keys["KeyD"]) kx += 1;
+  if(keys["ArrowUp"] || keys["KeyW"]) ky -= 1;
+  if(keys["ArrowDown"] || keys["KeyS"]) ky += 1;
+
+  if(kx !== 0 || ky !== 0){
+    keySteering = true;
+    var kl = Math.sqrt(kx*kx + ky*ky);
+    ax = kx / kl; ay = ky / kl;
+  } else if(!keySteering && p.hasTarget){
+    var dx = p.tx - p.x, dy = p.ty - p.y;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if(d > 3){
+      var m = clamp(d / 70, 0.15, 1);
+      ax = dx / d * m; ay = dy / d * m;
+    }
+  }
+
+  var slowed = inBlot(p.x, p.y);
+  var acc = CFG.accel * (slowed ? 0.55 : 1) * (G.glasses > 0 ? 0.7 : 1);
+  p.vx += ax * acc * dt;
+  p.vy += ay * acc * dt;
+
+  var fr = CFG.fric + (slowed ? 5.5 : 0) + (G.glasses > 0 ? 1.6 : 0);
+  var damp = Math.exp(-fr * dt);
+  p.vx *= damp; p.vy *= damp;
+
+  var vmax = CFG.maxSpeed;
+  if(slowed) vmax *= CFG.blotSlow;
+  if(G.glasses > 0) vmax *= CFG.glassesSlow;
+  var sp = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+  if(sp > vmax){ p.vx *= vmax / sp; p.vy *= vmax / sp; sp = vmax; }
+
+  p.x += p.vx * dt;
+  p.y += p.vy * dt;
+
+  var R = CFG.playerR + 2;
+  if(p.x < R){ p.x = R; p.vx = Math.abs(p.vx) * 0.35; }
+  if(p.x > W - R){ p.x = W - R; p.vx = -Math.abs(p.vx) * 0.35; }
+  if(p.y < R){ p.y = R; p.vy = Math.abs(p.vy) * 0.35; }
+  if(p.y > H - R){ p.y = H - R; p.vy = -Math.abs(p.vy) * 0.35; }
+
+  var dir = (Math.abs(p.vx) >= Math.abs(p.vy) ? (p.vx >= 0 ? 1 : -1) : (p.vy >= 0 ? 1 : -1));
+  p.rot += sp / CFG.playerR * dt * dir;
+
+  if(G.glasses > 0) G.glasses -= dt;
+}
+
+function snakeSpeed(){
+  return Math.min(CFG.snakeBase + G.t * CFG.snakeAccel, CFG.snakeMax);
+}
+
+function updateSnake(dt){
+  var s = G.snake, p = G.player;
+
+  if(s.freeze > 0){
+    s.freeze -= dt;
+    return; // stoji uplne (zvonek = prestavka)
+  }
+
+  // vyber cile: hrac, nebo blizsi falesne jablko
+  var bx = p.x, by = p.y, isFake = false, bestFake = -1;
+  var bd = dist(s.x, s.y, p.x, p.y);
+  for(var i = 0; i < G.fakes.length; i++){
+    var f = G.fakes[i];
+    var d = dist(s.x, s.y, f.x, f.y);
+    if(d < bd){ bd = d; bx = f.x; by = f.y; isFake = true; bestFake = i; }
+  }
+  s.targetX = bx; s.targetY = by; s.targetIsFake = isFake;
+
+  // vypadovy automat
+  if(s.phase === "none"){
+    s.lungeT -= dt;
+    if(s.lungeT <= 0 && G.grace <= 0){
+      s.phase = "tele"; s.phaseT = CFG.teleDur; sWarn();
+    }
+  } else if(s.phase === "tele"){
+    s.phaseT -= dt;
+    if(s.phaseT <= 0){
+      s.phase = "sprint"; s.phaseT = CFG.sprintDur;
+      s.heading = Math.atan2(by - s.y, bx - s.x);
+    }
+  } else if(s.phase === "sprint"){
+    s.phaseT -= dt;
+    if(s.phaseT <= 0){ s.phase = "none"; s.lungeT = rnd(CFG.lungeMin, CFG.lungeMax); }
+  }
+
+  var speed = snakeSpeed();
+  if(s.phase === "sprint"){
+    speed *= CFG.sprintMul;
+    // pri sprintu se nezataci
+  } else {
+    if(s.phase === "tele") speed *= 0.85;
+    var des = Math.atan2(by - s.y, bx - s.x);
+    var da = angNorm(des - s.heading);
+    // blizko cile zataci ostreji: polomer zatacky <= 0.42 * vzdalenost
+    var tr = Math.max(2.4, speed / (0.42 * Math.max(bd, 26)));
+    tr = Math.min(tr, 15);
+    // posledni zachrana proti krouzeni
+    if(bd < 170){
+      s.closeT += dt;
+      if(s.closeT > 3){ s.brake = 0.6; s.closeT = 1.2; }
+    } else {
+      s.closeT = 0;
+    }
+    if(s.brake > 0){ s.brake -= dt; speed *= 0.72; tr *= 1.7; }
+    s.heading += clamp(da, -tr * dt, tr * dt);
+  }
+
+  // odrazit hlavu od okraju (aby had neodjel z papiru)
+  var mvx = Math.cos(s.heading) * speed * dt;
+  var mvy = Math.sin(s.heading) * speed * dt;
+  var nx = s.x + mvx, ny = s.y + mvy;
+  var m = 14;
+  if(nx < m || nx > W - m || ny < m || ny > H - m){
+    nx = clamp(nx, m, W - m);
+    ny = clamp(ny, m, H - m);
+    if(s.phase === "sprint"){ s.phase = "none"; s.lungeT = rnd(CFG.lungeMin, CFG.lungeMax); }
+    s.heading = Math.atan2(by - ny, bx - nx);
+  }
+  var moved = dist(s.x, s.y, nx, ny);
+  s.x = nx; s.y = ny;
+
+  // zapis do cesty
+  if(s.path.length === 0){
+    s.path.unshift({ x: s.x, y: s.y });
+  } else {
+    var hd = dist(s.x, s.y, s.path[0].x, s.path[0].y);
+    if(hd >= 2){
+      s.path.unshift({ x: s.x, y: s.y });
+      s.pathLen += hd;
+    }
+  }
+  var need = CFG.spacing * (s.segs.length + 2) + 40;
+  while(s.path.length > 2 && s.pathLen > need){
+    var last = s.path[s.path.length - 1];
+    var prev = s.path[s.path.length - 2];
+    var dd = dist(last.x, last.y, prev.x, prev.y);
+    if(s.pathLen - dd < need) break;
+    s.path.pop();
+    s.pathLen -= dd;
+  }
+
+  updateSegments();
+
+  // snezeni falesneho jablka
+  for(var j = G.fakes.length - 1; j >= 0; j--){
+    var fa = G.fakes[j];
+    if(dist(s.x, s.y, fa.x, fa.y) < CFG.headR + 13){
+      G.fakes.splice(j, 1);
+      var tail = s.segs.length ? s.segs[s.segs.length - 1] : { x: s.x, y: s.y };
+      for(var g = 0; g < CFG.fakeGrow; g++) s.segs.push({ x: tail.x, y: tail.y });
+      sChomp();
+      addFloat(fa.x, fa.y, "chramst!", "#2b4fa8");
+      s.closeT = 0;
+    }
+  }
+
+  // kolize s hracem — cele telo je smrtici
+  if(G.grace <= 0){
+    var killD = (CFG.playerR + CFG.segR) * 0.72;
+    if(dist(s.x, s.y, p.x, p.y) < (CFG.playerR + CFG.headR) * 0.74){ die(); return; }
+    for(var q = 0; q < s.segs.length; q++){
+      var sg = s.segs[q];
+      if(dist(sg.x, sg.y, p.x, p.y) < killD){ die(); return; }
+    }
+  }
+}
+
+function updateSegments(){
+  var s = G.snake;
+  var pth = s.path;
+  if(pth.length < 2){
+    for(var i0 = 0; i0 < s.segs.length; i0++){ s.segs[i0].x = s.x; s.segs[i0].y = s.y; }
+    return;
+  }
+  var k = 0, acc = 0;
+  var segLen = dist(pth[0].x, pth[0].y, pth[1].x, pth[1].y);
+  for(var i = 0; i < s.segs.length; i++){
+    var target = (i + 1) * CFG.spacing;
+    while(k < pth.length - 2 && acc + segLen < target){
+      acc += segLen;
+      k++;
+      segLen = dist(pth[k].x, pth[k].y, pth[k+1].x, pth[k+1].y);
+    }
+    var r = segLen > 0.0001 ? clamp((target - acc) / segLen, 0, 1) : 0;
+    s.segs[i].x = pth[k].x + (pth[k+1].x - pth[k].x) * r;
+    s.segs[i].y = pth[k].y + (pth[k+1].y - pth[k].y) * r;
+  }
+}
+
+function spawnFake(x, y, drawn){
+  G.fakes.push({ x: x, y: y, t: 0, seed: Math.random() * 1000, drawn: !!drawn });
+}
+
+function autoFakeSpot(){
+  // nahodne misto dal od hada i hrace
+  for(var t = 0; t < 40; t++){
+    var x = rnd(60, W - 60), y = rnd(60, H - 60);
+    if(dist(x, y, G.snake.x, G.snake.y) < 130) continue;
+    if(dist(x, y, G.player.x, G.player.y) < 90) continue;
+    return { x: x, y: y };
+  }
+  return { x: W * 0.5, y: H * 0.5 };
+}
+
+function updateFakes(dt){
+  G.fakeTimer -= dt;
+  var autoCount = 0;
+  for(var i = 0; i < G.fakes.length; i++) if(!G.fakes[i].drawn) autoCount++;
+  if(G.fakeTimer <= 0){
+    if(autoCount < CFG.fakeAutoMax2){
+      var spot = autoFakeSpot();
+      spawnFake(spot.x, spot.y, false);
+      sScratch();
+    }
+    G.fakeTimer = rnd(CFG.fakeAutoMin, CFG.fakeAutoMax);
+  }
+  for(var j = G.fakes.length - 1; j >= 0; j--){
+    G.fakes[j].t += dt;
+    if(G.fakes[j].t > CFG.fakeLife) G.fakes.splice(j, 1);
+  }
+  if(G.drawCd > 0) G.drawCd -= dt;
+}
+
+function updateMarks(dt){
+  G.markTimer -= dt;
+  if(G.markTimer <= 0){
+    if(G.marks.length < 2){
+      for(var t = 0; t < 40; t++){
+        var x = rnd(80, W - 80), y = rnd(90, H - 80);
+        if(dist(x, y, G.snake.x, G.snake.y) < 120) continue;
+        var okB = true;
+        for(var b = 0; b < G.blots.length; b++){
+          if(dist(x, y, G.blots[b].x, G.blots[b].y) < G.blots[b].r + 40){ okB = false; break; }
+        }
+        if(!okB) continue;
+        G.marks.push({ x: x, y: y, t: 0, seed: Math.random() * 1000 });
+        break;
+      }
+    }
+    G.markTimer = rnd(CFG.markMin, CFG.markMax);
+  }
+  var p = G.player;
+  for(var i = G.marks.length - 1; i >= 0; i--){
+    var mk = G.marks[i];
+    mk.t += dt;
+    if(mk.t > CFG.markLife){ G.marks.splice(i, 1); continue; }
+    if(dist(mk.x, mk.y, p.x, p.y) < CFG.playerR + 21){
+      G.marks.splice(i, 1);
+      var roll = Math.random();
+      if(roll < 0.4){
+        // GUMA
+        var s = G.snake;
+        var n = Math.min(CFG.eraseCount, Math.max(0, s.segs.length - CFG.minLen));
+        if(n > 0) s.segs.splice(s.segs.length - n, n);
+        sErase();
+        addFloat(p.x, p.y - 26, "GUMA! Had je kratší.", "#b02020");
+      } else if(roll < 0.8){
+        // ZVONEK
+        G.snake.freeze = CFG.bellDur;
+        sBell();
+        addFloat(p.x, p.y - 26, "ZVONEK! Přestávka.", "#b02020");
+      } else {
+        // KANKA NA BRYLE
+        G.glasses = CFG.glassesDur;
+        sBlot();
+        addFloat(p.x, p.y - 26, "KAŇKA NA BRÝLE!", "#1a2a55");
+      }
+    }
+  }
+}
+
+function addFloat(x, y, txt, color){
+  G.floats.push({ x: x, y: y, txt: txt, color: color, t: 0 });
+}
+function updateFloats(dt){
+  for(var i = G.floats.length - 1; i >= 0; i--){
+    var f = G.floats[i];
+    f.t += dt; f.y -= 22 * dt;
+    if(f.t > 1.4) G.floats.splice(i, 1);
+  }
+}
+
+function die(){
+  G.state = "over";
+  G.overTime = G.t;
+  G.overCd = 0.5;
+  G.shake = 0.4;
+  sCrunch();
+  if(G.overTime > G.best){
+    G.best = G.overTime;
+    G.newBest = true;
+    saveBest();
+  }
+}
+
+function gradeFor(t){
+  if(t < 15) return { n: 5, txt: "Sežrán před zvoněním. Sedni si, pětka!" };
+  if(t < 30) return { n: 4, txt: "Slabé. Příště víc kličkuj a kresli jablka." };
+  if(t < 60) return { n: 3, txt: "Průměr. Had měl skoro hotovo." };
+  if(t < 120) return { n: 2, txt: "Velmi dobré. Skoro jsi mu utekl." };
+  return { n: 1, txt: "Výborně! Hada jsi úplně vyškolil." };
+}
+
+function update(dt){
+  G.t += dt;
+  if(G.grace > 0) G.grace -= dt;
+  if(G.shake > 0) G.shake -= dt;
+  updatePlayer(dt);
+  updateSnake(dt);
+  if(G.state !== "play") return;
+  updateFakes(dt);
+  updateMarks(dt);
+  updateFloats(dt);
+}
+
+/* ============================== pozadi (sesit) ============================== */
+
+var bgCanvases = [];
+function buildBackground(){
+  bgCanvases = [];
+  for(var v = 0; v < 3; v++){
+    var oc = document.createElement("canvas");
+    oc.width = Math.max(1, Math.floor(W * DPR));
+    oc.height = Math.max(1, Math.floor(H * DPR));
+    var o = oc.getContext("2d");
+    o.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawPaper(o, v * 137.3);
+    bgCanvases.push(oc);
+  }
+}
+
+function drawPaper(o, seed){
+  function pr(n){ var x = Math.sin((seed + n) * 91.7 + 13.1) * 24634.63; return x - Math.floor(x); }
+  o.fillStyle = "#fbf9ef";
+  o.fillRect(0, 0, W, H);
+  // ctverecky
+  var cell = 34;
+  o.strokeStyle = "rgba(120,160,210,0.35)";
+  o.lineWidth = 1;
+  o.beginPath();
+  for(var x = cell; x < W; x += cell){ o.moveTo(x + 0.5, 0); o.lineTo(x + 0.5, H); }
+  for(var y = cell; y < H; y += cell){ o.moveTo(0, y + 0.5); o.lineTo(W, y + 0.5); }
+  o.stroke();
+  // okraj stranky (cervena linka)
+  var mx = Math.min(56, W * 0.1);
+  o.strokeStyle = "rgba(200,60,60,0.55)";
+  o.lineWidth = 2;
+  o.beginPath();
+  o.moveTo(mx + pr(1) * 2, 0);
+  o.lineTo(mx + pr(2) * 2, H);
+  o.stroke();
+  // lehke zaslé okraje papiru
+  o.strokeStyle = "rgba(120,110,90,0.25)";
+  o.lineWidth = 3;
+  o.strokeRect(1.5, 1.5, W - 3, H - 3);
+
+  // dekorace: tuzkove cmaranice na okrajich
+  var pencil = "rgba(110,110,115,0.5)";
+  o.strokeStyle = pencil;
+  o.lineWidth = 1.6;
+  o.lineCap = "round";
+
+  function wob(x1, y1, x2, y2, n, amp){
+    o.beginPath();
+    for(var i = 0; i <= n; i++){
+      var t = i / n;
+      var px = x1 + (x2 - x1) * t + (pr(x1 + y2 + i) - 0.5) * amp;
+      var py = y1 + (y2 - y1) * t + (pr(y1 + x2 + i * 3) - 0.5) * amp;
+      if(i === 0) o.moveTo(px, py); else o.lineTo(px, py);
+    }
+    o.stroke();
+  }
+
+  if(W > 480 && H > 480){
+    // piskvorky vpravo dole
+    var gx = W - 118, gy = H - 118, gs = 26;
+    wob(gx + gs, gy, gx + gs, gy + gs * 3, 6, 2.5);
+    wob(gx + gs * 2, gy, gx + gs * 2, gy + gs * 3, 6, 2.5);
+    wob(gx, gy + gs, gx + gs * 3, gy + gs, 6, 2.5);
+    wob(gx, gy + gs * 2, gx + gs * 3, gy + gs * 2, 6, 2.5);
+    // par znaku
+    wob(gx + 5, gy + 5, gx + gs - 5, gy + gs - 5, 3, 1.5);
+    wob(gx + gs - 5, gy + 5, gx + 5, gy + gs - 5, 3, 1.5);
+    o.beginPath(); o.arc(gx + gs * 1.5, gy + gs * 1.5, 8 + pr(7), 0, Math.PI * 1.95); o.stroke();
+    wob(gx + gs * 2 + 5, gy + gs + 5, gx + gs * 3 - 5, gy + gs * 2 - 5, 3, 1.5);
+    wob(gx + gs * 3 - 5, gy + gs + 5, gx + gs * 2 + 5, gy + gs * 2 - 5, 3, 1.5);
+
+    // srdicko vpravo nahore
+    var hx = W - 74, hy = 84;
+    o.beginPath();
+    o.moveTo(hx, hy + 10);
+    o.bezierCurveTo(hx - 16, hy - 8, hx - 5, hy - 18, hx, hy - 6);
+    o.bezierCurveTo(hx + 5, hy - 18, hx + 16, hy - 8, hx, hy + 10);
+    o.stroke();
+
+    // zaskrtana slovicka vlevo dole (v okraji)
+    o.font = '13px ' + FONT;
+    o.fillStyle = "rgba(110,110,115,0.55)";
+    var words = ["the snake", "die Schlange", "hadisko"];
+    for(var wi = 0; wi < words.length; wi++){
+      var wy2 = H - 150 + wi * 24;
+      if(mx > 40){
+        o.save();
+        o.translate(8, wy2);
+        o.rotate(-0.03 + pr(wi) * 0.05);
+        o.fillText(words[wi], 0, 0);
+        o.restore();
+        if(wi < 2) wob(6, wy2 - 4, 6 + 44, wy2 - 5, 4, 2);
+      }
+    }
+
+    // mala dekoracni kanka u okraje (svetla, tuzkova — NE herni)
+    o.fillStyle = "rgba(120,120,125,0.30)";
+    o.beginPath();
+    o.arc(W - 40, H * 0.45, 7 + pr(21) * 3, 0, Math.PI * 2);
+    o.fill();
+    o.beginPath();
+    o.arc(W - 30, H * 0.45 + 9, 3, 0, Math.PI * 2);
+    o.fill();
+  }
+}
+
+/* ============================== kresleni ============================== */
+
+function wobblyCircle(c, x, y, r, seed, amp, closeIt){
+  var n = Math.max(8, Math.floor(r * 0.9));
+  c.beginPath();
+  for(var i = 0; i <= n; i++){
+    var a = i / n * Math.PI * 2;
+    var rr = r + (jr(seed + i * 7.13) - 0.5) * amp * 2;
+    var px = x + Math.cos(a) * rr;
+    var py = y + Math.sin(a) * rr;
+    if(i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+  }
+  if(closeIt !== false) c.closePath();
+}
+
+function wobblyLine(c, x1, y1, x2, y2, seed, amp, n){
+  n = n || 6;
+  c.beginPath();
+  var dx = x2 - x1, dy = y2 - y1;
+  var len = Math.sqrt(dx*dx + dy*dy) || 1;
+  var nxp = -dy / len, nyp = dx / len;
+  for(var i = 0; i <= n; i++){
+    var t = i / n;
+    var off = (jr(seed + i * 3.7) - 0.5) * amp * 2 * (i === 0 || i === n ? 0.3 : 1);
+    var px = x1 + dx * t + nxp * off;
+    var py = y1 + dy * t + nyp * off;
+    if(i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+  }
+  c.stroke();
+}
+
+function drawPlayer(c){
+  var p = G.player;
+  c.save();
+  c.translate(p.x, p.y);
+
+  // ochranna lhuta — carkovany kruh
+  if(G.grace > 0 && G.state === "play"){
+    c.save();
+    c.strokeStyle = "rgba(200,50,50," + (0.35 + 0.3 * Math.sin(G.t * 10)) + ")";
+    c.lineWidth = 2;
+    c.setLineDash([6, 6]);
+    c.beginPath();
+    c.arc(0, 0, CFG.playerR + 9, G.t * 2, G.t * 2 + Math.PI * 2);
+    c.stroke();
+    c.restore();
+  }
+
+  // zpomaleni (bryle) — modre skvrnky okolo
+  if(G.glasses > 0){
+    c.fillStyle = "rgba(26,42,85,0.5)";
+    for(var b = 0; b < 3; b++){
+      var a = G.t * 3 + b * 2.1;
+      c.beginPath();
+      c.arc(Math.cos(a) * 20, Math.sin(a) * 20, 3, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+
+  c.rotate(p.rot);
+  var red = "#c0392b";
+  c.strokeStyle = red;
+  c.lineWidth = 2.6;
+  c.lineCap = "round";
+  wobblyCircle(c, 0, 0, CFG.playerR, 11.7, 1.4);
+  c.stroke();
+  // druhy tah (propiska prejeta dvakrat)
+  c.lineWidth = 1.2;
+  c.globalAlpha = 0.6;
+  wobblyCircle(c, 0, 0, CFG.playerR - 1.5, 31.9, 1.6);
+  c.stroke();
+  c.globalAlpha = 1;
+  // vnitrni srafovani, aby bylo videt otaceni
+  c.lineWidth = 1.6;
+  wobblyLine(c, -CFG.playerR * 0.55, -CFG.playerR * 0.3, CFG.playerR * 0.4, CFG.playerR * 0.5, 5.2, 1, 4);
+  wobblyLine(c, -CFG.playerR * 0.3, CFG.playerR * 0.45, CFG.playerR * 0.15, -CFG.playerR * 0.4, 9.4, 1, 4);
+  // stopka a listek
+  c.lineWidth = 2.4;
+  c.strokeStyle = "#7a4a20";
+  wobblyLine(c, 0, -CFG.playerR + 1, 2, -CFG.playerR - 7, 3.3, 0.8, 3);
+  c.strokeStyle = "#3f7a33";
+  c.beginPath();
+  c.ellipse(6, -CFG.playerR - 6, 5, 2.6, 0.5 + (jr(77) - 0.5) * 0.2, 0, Math.PI * 2);
+  c.stroke();
+  c.restore();
+}
+
+function drawSnake(c){
+  var s = G.snake;
+  var blue = "#2b4fa8";
+  var alpha = (G.grace > 0 && G.state === "play") ? 0.45 : 1;
+  c.save();
+  c.globalAlpha = alpha;
+  c.lineCap = "round";
+
+  // telo od ocasu k hlave
+  for(var i = s.segs.length - 1; i >= 0; i--){
+    var sg = s.segs[i];
+    var r = CFG.segR * (1 - i / (s.segs.length + 6) * 0.35);
+    c.strokeStyle = blue;
+    c.lineWidth = 2.2;
+    wobblyCircle(c, sg.x, sg.y, r, 100 + i * 13.7, 1.3);
+    c.stroke();
+  }
+
+  // hlava (pri telegrafovani se zavrti)
+  var hx = s.x, hy = s.y;
+  if(s.phase === "tele"){
+    var wig = Math.sin(G.t * 42) * 3.2;
+    hx += Math.cos(s.heading + Math.PI / 2) * wig;
+    hy += Math.sin(s.heading + Math.PI / 2) * wig;
+  }
+  c.strokeStyle = s.phase === "sprint" ? "#173a8f" : blue;
+  c.lineWidth = 2.8;
+  wobblyCircle(c, hx, hy, CFG.headR, 55.1, 1.4);
+  c.stroke();
+
+  // oci
+  var ea = s.heading;
+  var ex = Math.cos(ea), ey = Math.sin(ea);
+  var px2 = -ey, py2 = ex;
+  c.fillStyle = "#fbf9ef";
+  c.strokeStyle = blue;
+  c.lineWidth = 1.4;
+  for(var e = -1; e <= 1; e += 2){
+    var ox = hx + ex * 4 + px2 * 5 * e;
+    var oy = hy + ey * 4 + py2 * 5 * e;
+    c.beginPath(); c.arc(ox, oy, 3.4, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = "#1a2a55";
+    c.beginPath(); c.arc(ox + ex * 1.4, oy + ey * 1.4, 1.5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#fbf9ef";
+  }
+  // jazyk
+  if(Math.floor(G.t * 2.5) % 2 === 0 || s.phase !== "none"){
+    c.strokeStyle = "#b02020";
+    c.lineWidth = 1.6;
+    var tx = hx + ex * (CFG.headR + 1), ty = hy + ey * (CFG.headR + 1);
+    var tx2 = tx + ex * 9, ty2 = ty + ey * 9;
+    wobblyLine(c, tx, ty, tx2, ty2, 8.8, 0.8, 3);
+    c.beginPath();
+    c.moveTo(tx2, ty2);
+    c.lineTo(tx2 + (ex * 4 - ey * 3), ty2 + (ey * 4 + ex * 3));
+    c.moveTo(tx2, ty2);
+    c.lineTo(tx2 + (ex * 4 + ey * 3), ty2 + (ey * 4 - ex * 3));
+    c.stroke();
+  }
+  // zvonek: zzz nad hlavou
+  if(s.freeze > 0){
+    c.fillStyle = blue;
+    c.font = '16px ' + FONT;
+    c.fillText("zzz", hx + 10, hy - 16);
+  }
+  c.restore();
+}
+
+function drawFake(c, f){
+  var g = "#8a8a90"; // tuzka
+  c.save();
+  var fade = 1;
+  if(f.t < 0.25) fade = f.t / 0.25;
+  if(CFG.fakeLife - f.t < 2) fade = Math.max(0, (CFG.fakeLife - f.t) / 2);
+  c.globalAlpha = 0.85 * fade;
+  c.strokeStyle = g;
+  c.lineCap = "round";
+  c.lineWidth = 2;
+  wobblyCircle(c, f.x, f.y, 12, f.seed, 1.8);
+  c.stroke();
+  c.lineWidth = 1.1;
+  c.globalAlpha = 0.55 * fade;
+  wobblyCircle(c, f.x, f.y, 10.5, f.seed + 40, 2.2);
+  c.stroke();
+  // srafovani tuzkou
+  c.globalAlpha = 0.4 * fade;
+  for(var i = 0; i < 4; i++){
+    var off = -8 + i * 5;
+    wobblyLine(c, f.x + off - 3, f.y + 8, f.x + off + 5, f.y - 8, f.seed + i * 3, 1, 3);
+  }
+  // stopka
+  c.globalAlpha = 0.8 * fade;
+  c.lineWidth = 1.8;
+  wobblyLine(c, f.x, f.y - 11, f.x + 3, f.y - 18, f.seed + 99, 1, 3);
+  c.restore();
+}
+
+function drawMark(c, mk){
+  c.save();
+  var fade = 1;
+  if(mk.t < 0.3) fade = mk.t / 0.3;
+  var left = CFG.markLife - mk.t;
+  if(left < 2) fade = (Math.floor(mk.t * 6) % 2 === 0) ? 0.9 : 0.3; // blika pred zmizenim
+  c.globalAlpha = fade;
+  c.translate(mk.x, mk.y);
+  c.rotate((jr(mk.seed) - 0.5) * 0.15);
+  c.fillStyle = "#2b4fa8";
+  c.font = 'bold 56px ' + FONT;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  var jx = (jr(mk.seed + 3) - 0.5) * 2;
+  var jy = (jr(mk.seed + 5) - 0.5) * 2;
+  c.fillText("?", jx, jy);
+  c.restore();
+}
+
+function drawBlot(c, b){
+  c.save();
+  c.fillStyle = "#141c3f";
+  c.beginPath();
+  var n = b.pts.length;
+  for(var i = 0; i <= n; i++){
+    var idx = i % n;
+    var a = i / n * Math.PI * 2;
+    var rr = b.r * b.pts[idx] + (jr(b.seed + idx * 5.1) - 0.5) * 3;
+    var px = b.x + Math.cos(a) * rr;
+    var py = b.y + Math.sin(a) * rr;
+    if(i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+  }
+  c.closePath();
+  c.fill();
+  // odlesky a kapicky
+  c.fillStyle = "rgba(70,90,160,0.5)";
+  c.beginPath(); c.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.16, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#141c3f";
+  c.beginPath(); c.arc(b.x + b.r * 0.95, b.y + b.r * 0.5, 4, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.arc(b.x - b.r * 0.8, b.y + b.r * 0.85, 3, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+
+function drawHUD(c){
+  var red = "#b02020";
+  c.save();
+  c.fillStyle = red;
+  c.textAlign = "left";
+  c.textBaseline = "top";
+  var small = Math.min(W, H) < 500;
+  var fs = small ? 17 : 22;
+  c.font = fs + "px " + FONT;
+  c.save();
+  c.translate(Math.min(66, W * 0.12), 10);
+  c.rotate(-0.02 + (jr(500) - 0.5) * 0.01);
+  c.fillText("Čas: " + Math.floor(G.t) + " s", 0, 0);
+  if(G.best > 0){
+    c.font = (fs - 5) + "px " + FONT;
+    c.fillText("Rekord: " + Math.floor(G.best) + " s", 0, fs + 6);
+  }
+  c.restore();
+
+  // tuzka s cooldownem (vpravo nahore)
+  var cx = W - (small ? 34 : 46), cy = (small ? 34 : 46), R = small ? 20 : 26;
+  c.lineWidth = 2;
+  var ready = G.drawCd <= 0;
+  c.strokeStyle = ready ? red : "rgba(140,140,145,0.8)";
+  c.beginPath();
+  if(ready){
+    c.arc(cx, cy, R, 0, Math.PI * 2);
+  } else {
+    var frac = 1 - clamp(G.drawCd / CFG.drawCd, 0, 1);
+    c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+  }
+  c.stroke();
+  // tuzka uvnitr
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(-0.7);
+  c.strokeStyle = "#6e6e73";
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(-8, -3); c.lineTo(6, -3); c.lineTo(11, 0); c.lineTo(6, 3); c.lineTo(-8, 3); c.closePath();
+  c.stroke();
+  c.beginPath(); c.moveTo(6, -3); c.lineTo(6, 3); c.stroke();
+  c.restore();
+  if(ready){
+    c.fillStyle = red;
+    c.font = (small ? 10 : 12) + "px " + FONT;
+    c.textAlign = "center";
+    c.fillText("klik!", cx, cy + R + 4);
+  }
+  c.restore();
+}
+
+function drawFloats(c){
+  c.save();
+  c.textAlign = "center";
+  c.textBaseline = "bottom";
+  for(var i = 0; i < G.floats.length; i++){
+    var f = G.floats[i];
+    var a = clamp(1.2 - f.t, 0, 1);
+    c.globalAlpha = a;
+    c.fillStyle = f.color;
+    c.font = "bold 18px " + FONT;
+    c.fillText(f.txt, f.x, f.y);
+  }
+  c.restore();
+}
+
+function paperWash(c, a){
+  c.fillStyle = "rgba(251,249,239," + a + ")";
+  c.fillRect(0, 0, W, H);
+}
+
+function centerText(c, txt, y, size, color, bold, rot){
+  c.save();
+  c.translate(W / 2, y);
+  c.rotate(rot || 0);
+  c.fillStyle = color;
+  c.font = (bold ? "bold " : "") + size + "px " + FONT;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText(txt, (jr(txt.length * 3.1) - 0.5) * 2, (jr(txt.length * 7.7) - 0.5) * 2);
+  c.restore();
+}
+
+function drawMenu(c){
+  paperWash(c, 0.72);
+  var u = clamp(Math.min(W, H) / 620, 0.55, 1.25);
+  centerText(c, "SVAČINA", H * 0.26, 74 * u, "#b02020", true, -0.03);
+  // podtrzeni
+  c.strokeStyle = "#b02020";
+  c.lineWidth = 3;
+  wobblyLine(c, W / 2 - 150 * u, H * 0.26 + 48 * u, W / 2 + 150 * u, H * 0.26 + 52 * u, 42.1, 3, 8);
+  centerText(c, "Jsi svačina. Uteč hadovi.", H * 0.38, 27 * u, "#2b4fa8", false, 0.01);
+  centerText(c, "Myší nebo prstem vedeš jablko — kutálí se za kurzorem.", H * 0.5, 17 * u, "#444", false, 0);
+  centerText(c, "Kliknutím nakreslíš falešné jablko a hada napálíš.", H * 0.5 + 30 * u, 17 * u, "#444", false, 0);
+  centerText(c, "Šipky nebo WASD fungují taky. Otazníky sbírej odvážně.", H * 0.5 + 60 * u, 17 * u, "#444", false, 0);
+  var blink = Math.floor(performance.now() / 600) % 2 === 0;
+  if(blink) centerText(c, "Klikni nebo stiskni klávesu — a utíkej!", H * 0.72, 23 * u, "#b02020", true, 0.01);
+  if(G.best > 0) centerText(c, "Rekord: " + Math.floor(G.best) + " s", H * 0.82, 18 * u, "#b02020", false, -0.01);
+}
+
+function drawPause(c){
+  paperWash(c, 0.7);
+  var u = clamp(Math.min(W, H) / 620, 0.55, 1.25);
+  centerText(c, "PŘESTÁVKA", H * 0.4, 52 * u, "#2b4fa8", true, -0.02);
+  centerText(c, "Hra je pozastavená.", H * 0.52, 22 * u, "#444", false, 0);
+  centerText(c, "Klikni nebo stiskni klávesu pro pokračování.", H * 0.6, 20 * u, "#b02020", true, 0.01);
+}
+
+function drawOver(c){
+  paperWash(c, 0.78);
+  var u = clamp(Math.min(W, H) / 620, 0.55, 1.25);
+  var gr = gradeFor(G.overTime);
+  centerText(c, "CHRAMST! Sežral tě.", H * 0.2, 34 * u, "#2b4fa8", true, -0.02);
+  centerText(c, "Přežil jsi " + Math.floor(G.overTime) + " s", H * 0.3, 24 * u, "#444", false, 0);
+
+  // znamka v cervenem krouzku
+  var gy = H * 0.47;
+  centerText(c, String(gr.n), gy, 96 * u, "#b02020", true, 0.05);
+  c.strokeStyle = "#b02020";
+  c.lineWidth = 3.4;
+  wobblyCircle(c, W / 2, gy, 74 * u, 9.9, 4);
+  c.stroke();
+  c.lineWidth = 1.6;
+  c.globalAlpha = 0.7;
+  wobblyCircle(c, W / 2 + 3, gy - 2, 70 * u, 19.2, 5);
+  c.stroke();
+  c.globalAlpha = 1;
+
+  centerText(c, "„" + gr.txt + "“", H * 0.63, 20 * u, "#b02020", false, -0.01);
+  if(G.newBest) centerText(c, "Nový rekord!", H * 0.7, 22 * u, "#b02020", true, 0.02);
+  else if(G.best > 0) centerText(c, "Rekord: " + Math.floor(G.best) + " s", H * 0.7, 18 * u, "#666", false, 0);
+  if(G.overCd <= 0){
+    var blink = Math.floor(performance.now() / 600) % 2 === 0;
+    if(blink) centerText(c, "Klikni pro novou hodinu.", H * 0.8, 22 * u, "#b02020", true, 0.01);
+  }
+}
+
+function render(){
+  boil = Math.floor(performance.now() / 150);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  var shx = 0, shy = 0;
+  if(G.shake > 0){
+    shx = (Math.random() - 0.5) * 8 * G.shake;
+    shy = (Math.random() - 0.5) * 8 * G.shake;
+  }
+  ctx.translate(shx, shy);
+
+  var bg = bgCanvases[boil % bgCanvases.length];
+  if(bg) ctx.drawImage(bg, 0, 0, W, H);
+  else { ctx.fillStyle = "#fbf9ef"; ctx.fillRect(0, 0, W, H); }
+
+  if(G.state !== "menu"){
+    for(var b = 0; b < G.blots.length; b++) drawBlot(ctx, G.blots[b]);
+    for(var f = 0; f < G.fakes.length; f++) drawFake(ctx, G.fakes[f]);
+    for(var m = 0; m < G.marks.length; m++) drawMark(ctx, G.marks[m]);
+    drawSnake(ctx);
+    drawPlayer(ctx);
+    drawFloats(ctx);
+    drawHUD(ctx);
+  }
+
+  if(G.state === "menu") drawMenu(ctx);
+  else if(G.state === "pause") drawPause(ctx);
+  else if(G.state === "over") drawOver(ctx);
+}
+
+/* ============================== smycka ============================== */
+
+var lastTs = 0;
+function loop(ts){
+  var dt = (ts - lastTs) / 1000;
+  lastTs = ts;
+  if(dt > 0.05) dt = 0.05;
+  if(dt < 0) dt = 0;
+  if(G.state === "play") update(dt);
+  if(G.state === "over" && G.overCd > 0) G.overCd -= dt;
+  if(G.shake > 0 && G.state !== "play") G.shake -= dt;
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* ============================== vstup ============================== */
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.max(1, Math.floor(W * DPR));
+  canvas.height = Math.max(1, Math.floor(H * DPR));
+  buildBackground();
+  // udrzet objekty v novem okne
+  if(G.player){
+    G.player.x = clamp(G.player.x, 20, W - 20);
+    G.player.y = clamp(G.player.y, 20, H - 20);
+    G.player.tx = clamp(G.player.tx, 0, W);
+    G.player.ty = clamp(G.player.ty, 0, H);
+  }
+  if(G.snake){
+    G.snake.x = clamp(G.snake.x, 14, W - 14);
+    G.snake.y = clamp(G.snake.y, 14, H - 14);
+  }
+  for(var i = 0; i < G.blots.length; i++){
+    G.blots[i].x = clamp(G.blots[i].x, G.blots[i].r, W - G.blots[i].r);
+    G.blots[i].y = clamp(G.blots[i].y, G.blots[i].r, H - G.blots[i].r);
+  }
+  for(var f = 0; f < G.fakes.length; f++){
+    G.fakes[f].x = clamp(G.fakes[f].x, 20, W - 20);
+    G.fakes[f].y = clamp(G.fakes[f].y, 20, H - 20);
+  }
+  for(var m = 0; m < G.marks.length; m++){
+    G.marks[m].x = clamp(G.marks[m].x, 30, W - 30);
+    G.marks[m].y = clamp(G.marks[m].y, 30, H - 30);
+  }
+}
+window.addEventListener("resize", resize);
+
+function startGame(){
+  resetGame();
+  G.state = "play";
+}
+
+function tryDrawFake(x, y){
+  if(G.drawCd > 0) return;
+  G.drawCd = CFG.drawCd;
+  spawnFake(clamp(x, 16, W - 16), clamp(y, 16, H - 16), true);
+  sScratch();
+}
+
+/* pointer: pohyb = cil, kratky tap/klik = nakreslit jablko */
+var pdTime = 0, pdX = 0, pdY = 0, skipTap = false;
+
+function stateAdvance(){
+  // klik/klavesa v ne-hernich stavech
+  if(G.state === "menu"){ startGame(); return true; }
+  if(G.state === "pause"){
+    G.state = "play";
+    G.grace = Math.max(G.grace, 0.8);
+    return true;
+  }
+  if(G.state === "over"){
+    if(G.overCd <= 0){ startGame(); }
+    return true;
+  }
+  return false;
+}
+
+canvas.addEventListener("pointerdown", function(e){
+  initAudio();
+  e.preventDefault();
+  pdTime = performance.now(); pdX = e.clientX; pdY = e.clientY;
+  skipTap = false;
+  if(G.state !== "play"){
+    skipTap = true;
+    stateAdvance();
+    return;
+  }
+  keySteering = false;
+  G.player.tx = e.clientX; G.player.ty = e.clientY; G.player.hasTarget = true;
+});
+
+canvas.addEventListener("pointermove", function(e){
+  if(!G.player) return;
+  keySteering = false;
+  G.player.tx = e.clientX; G.player.ty = e.clientY; G.player.hasTarget = true;
+});
+
+canvas.addEventListener("pointerup", function(e){
+  e.preventDefault();
+  if(G.state !== "play" || skipTap) return;
+  var dt = performance.now() - pdTime;
+  var moved = dist(e.clientX, e.clientY, pdX, pdY);
+  if(dt < 350 && moved < 14){
+    tryDrawFake(e.clientX, e.clientY);
+  }
+});
+
+canvas.addEventListener("pointercancel", function(){ skipTap = true; });
+
+window.addEventListener("keydown", function(e){
+  initAudio();
+  var code = e.code;
+  if(code === "ArrowLeft" || code === "ArrowRight" || code === "ArrowUp" || code === "ArrowDown" || code === "Space"){
+    e.preventDefault();
+  }
+  if(G.state !== "play"){
+    if(!e.repeat) stateAdvance();
+    return;
+  }
+  keys[code] = true;
+});
+window.addEventListener("keyup", function(e){
+  keys[e.code] = false;
+});
+
+function pauseGame(){
+  if(G.state === "play"){
+    G.state = "pause";
+    keys = {};
+  }
+}
+window.addEventListener("blur", pauseGame);
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden) pauseGame();
+});
+
+/* ============================== start ============================== */
+
+loadBest();
+resize();
+resetGame();
+G.state = "menu";
+requestAnimationFrame(function(ts){ lastTs = ts; requestAnimationFrame(loop); });
+
+/* maly hak pro automaticke testy (nic neloguje) */
+window.__SV = {
+  G: G, CFG: CFG,
+  step: function(dt){ update(dt); if(G.state === "over" && G.overCd > 0) G.overCd -= dt; },
+  start: startGame,
+  reset: resetGame,
+  drawFake: tryDrawFake
+};
 
 })();
 </script>
