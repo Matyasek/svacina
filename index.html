@@ -2,1198 +2,1133 @@
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>SVAČINA</title>
 <style>
-  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#fbf7ec;}
-  canvas{display:block;width:100vw;height:100vh;touch-action:none;cursor:crosshair;
-    -webkit-user-select:none;user-select:none;}
+  :root{
+    --pen:#1a3fae; --red:#c92a2a; --pencil:#6b6b6b; --paper:#f7f3e7;
+    --hw:"Chalkboard SE","Comic Sans MS","Segoe Print","Bradley Hand",cursive;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--paper)}
+  body{font-family:var(--hw);color:#233}
+  #cv{position:fixed;inset:0;display:block;touch-action:none;cursor:crosshair}
+  .overlay{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(247,243,231,.55);z-index:10;padding:10px;overflow:auto;
+  }
+  .hidden{display:none !important}
+  .note{
+    background:#fdfaf0;border:2px solid rgba(120,130,160,.55);
+    border-radius:14px 6px 16px 8px / 8px 14px 6px 18px;
+    box-shadow:4px 6px 0 rgba(60,70,90,.12);
+    padding:22px 26px;max-width:560px;width:min(94vw,560px);
+    max-height:94svh;overflow:auto;transform:rotate(-.7deg);
+    text-align:center;
+  }
+  h1{color:var(--red);font-size:clamp(34px,8vw,56px);letter-spacing:4px;line-height:1.05}
+  .tag{color:var(--pen);font-size:clamp(17px,4vw,22px);margin:6px 0 2px}
+  .sub{color:#667;font-size:14px;margin-bottom:10px}
+  .tahak{
+    text-align:left;background:#fbf6df;border:1.5px dashed #b9a75c;
+    border-radius:4px 10px 6px 12px;padding:10px 14px;margin:12px 0;
+    font-size:clamp(13px,3.4vw,15.5px);color:#4a4632;position:relative;
+    transform:rotate(.8deg);
+  }
+  .tahak::before{
+    content:"";position:absolute;top:-9px;left:50%;transform:translateX(-50%) rotate(-2deg);
+    width:74px;height:16px;background:rgba(200,205,190,.75);border:1px solid rgba(150,150,140,.5);
+  }
+  .tahak b{color:#7a5b12}
+  .tahak .ttl{text-align:center;font-weight:bold;color:#8a2b2b;margin-bottom:6px;letter-spacing:1px}
+  .tahak ul{list-style:none}
+  .tahak li{margin:5px 0;padding-left:16px;position:relative}
+  .tahak li::before{content:"—";position:absolute;left:0;color:#9a8a4a}
+  .znamky{margin-top:7px;border-top:1px dashed #c8b878;padding-top:6px;font-size:.94em}
+  .pozn{font-style:italic;color:#8a6a1a;font-size:.9em;margin-top:4px}
+  button{
+    font-family:var(--hw);font-size:clamp(16px,4vw,20px);color:var(--pen);
+    background:rgba(255,255,255,.6);border:2.2px solid var(--pen);
+    border-radius:14px 5px 12px 7px / 7px 13px 6px 15px;
+    padding:9px 22px;margin:6px 6px 0;cursor:pointer;
+  }
+  button:hover{background:#eef2ff;transform:rotate(-1deg)}
+  button.small{font-size:15px;padding:6px 14px;color:#667;border-color:#889}
+  .grade-wrap{margin:8px 0 2px}
+  .grade{
+    display:inline-block;color:var(--red);border:3.5px solid var(--red);
+    border-radius:50% 46% 52% 48% / 48% 52% 46% 54%;
+    padding:10px 26px;font-size:clamp(30px,7vw,46px);font-weight:bold;
+    transform:rotate(-3deg);
+  }
+  .grade.pochvala{font-size:clamp(18px,4.4vw,26px);padding:12px 18px;max-width:90%}
+  .koment{color:var(--red);font-size:clamp(16px,4vw,20px);margin:10px 4px 4px;line-height:1.3}
+  .cas{color:#334;font-size:clamp(16px,4vw,19px);margin-top:8px}
+  .rekord{color:#778;font-size:15px;margin-top:2px}
+  .novy-rekord{color:var(--red);font-weight:bold;font-size:17px;margin-top:4px;letter-spacing:1px}
+  .hint{color:#889;font-size:13px;margin-top:10px}
+  #pause .note{transform:rotate(.6deg)}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="cv"></canvas>
+
+<div id="menu" class="overlay">
+  <div class="note">
+    <h1>SVAČINA</h1>
+    <div class="tag">Jsi svačina. Uteč hadovi.</div>
+    <div class="sub">Had ze sešitu má hlad a ty jsi jablko. Myš nebo prst vedou, kam se koulíš. Klávesy (šipky, WASD) fungují taky.</div>
+    <div class="tahak">
+      <div class="ttl">T A H Á K &nbsp;(neukazovat učiteli)</div>
+      <ul>
+        <li><b>Tužka</b> (klik / ťuknutí): nakreslíš falešné jablko. Had mu skočí na špek — a po sežrání vyroste. Pozor, tužka se musí ořezat (cooldown).</li>
+        <li><b>Otazník</b>: seber ho dřív, než zmizí. Padne <b>guma</b> (smaže hadovi kus ocasu), <b>zvonek</b> (had má 2 s přestávku), <b>bombové jablko</b> do zásoby (tvoje příští kresba hada omráčí), nebo <b>nová kaňka</b>.</li>
+        <li><b>Kaňky</b> brzdí jen tebe. Had po nich klouže jak po mastném lavoru.</li>
+        <li>Před výpadem se had <b>zavrtí</b>. To je půl vteřiny na modlitbu — nebo na kličku.</li>
+      </ul>
+      <div class="znamky">
+        <b>Stupnice hodnocení:</b> do 15 s → 5, do 30 s → 4, do 60 s → 3, do 120 s → 2, do 210 s → 1, od 210 s → <b>POCHVALA ŘEDITELE ŠKOLY</b>
+        <div class="pozn">Pochvalu ředitele prý ještě nikdo živý nedostal.</div>
+      </div>
+    </div>
+    <div class="rekord" id="menuBest"></div>
+    <button id="btnStart">Zvoní! Utíkej</button>
+    <div class="hint">…nebo zmáčkni mezerník. Pauza: P.</div>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="note">
+    <h1 style="font-size:clamp(28px,6vw,40px)">PŘESTÁVKA</h1>
+    <div class="tag">Had si došel pro svačinu. Ta svačina jsi ty.</div>
+    <div style="margin-top:10px">
+      <button id="btnResume">Pokračovat (P)</button>
+      <button id="btnPauseMenu" class="small">Zpět do menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="note">
+    <div class="tag" style="letter-spacing:2px">ŽÁKOVSKÁ KNÍŽKA</div>
+    <div class="cas" id="overCas"></div>
+    <div class="grade-wrap"><span class="grade" id="overGrade"></span></div>
+    <div class="koment" id="overKoment"></div>
+    <div class="novy-rekord hidden" id="overNovy">NOVÝ REKORD! (podpis rodičů netřeba)</div>
+    <div class="rekord" id="overRekord"></div>
+    <div style="margin-top:10px">
+      <button id="btnAgain">Hrát znovu</button>
+      <button id="btnOverMenu" class="small">Menu</button>
+    </div>
+    <div class="hint">Mezerník = znovu do lavice.</div>
+  </div>
+</div>
+
 <script>
-(() => {
 "use strict";
+(() => {
+const TAU = Math.PI*2;
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const HW = '"Chalkboard SE","Comic Sans MS","Segoe Print",cursive';
 
-// ===================== základ =====================
-const cv = document.getElementById('c');
-const ctx = cv.getContext('2d');
-const TAU = Math.PI * 2;
-const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
-const lerp = (a,b,t) => a + (b-a) * t;
-const rnd = (a,b) => a + Math.random() * (b-a);
-const hyp = Math.hypot;
-function angDiff(a,b){ let d = (b-a) % TAU; if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU; return d; }
-function jit(seed,i,ph,amp){ const s = Math.sin(seed*127.1 + i*269.5 + ph*97.73) * 43758.5453; return (s - Math.floor(s) - 0.5) * 2 * amp; }
+// ---------- utils ----------
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
+const angNorm=a=>{while(a>Math.PI)a-=TAU;while(a<-Math.PI)a+=TAU;return a;};
 
-const FONT = '"Segoe Print","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive';
-const RED = '#c02828', BLUE = '#2843ae', PENCIL = '#82889a', INK = '#1c2152', PAPER = '#fbf7ec';
+// deterministic noise 0..1
+function n1(s){const x=Math.sin(s*127.1+311.7)*43758.5453;return x-Math.floor(x);}
 
-let W = 0, H = 0, DPR = 1, SCL = 1, boil = 0, now = 0;
+// boiling variants (fast for doodles, slow for ink blots)
+let bv=0, bvSlow=0, nowSec=0;
 
-const C = {
-  pR: 13, headR: 12.5, segR: 9.5, segSp: 13,
-  pAcc: 820, pDrag: 3.4,      // max rychlost jablka ~241*SCL px/s
-  grace: 2,
-  fakeR: 11, qR: 24,
-};
+function jx(x,seed,amp){return x+(n1(seed+bv*97.7)*2-1)*amp;}
+function jy(y,seed,amp){return y+(n1(seed+57.3+bv*77.1)*2-1)*amp;}
 
-// ===================== zvuk =====================
-const AU = {
-  ctx: null, nbuf: null,
-  init(){
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(()=>{}); return; }
-    try {
-      const A = window.AudioContext || window.webkitAudioContext;
-      if (!A) return;
-      this.ctx = new A();
-      const len = this.ctx.sampleRate | 0;
-      this.nbuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const d = this.nbuf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-      if (this.ctx.state === 'suspended') this.ctx.resume().catch(()=>{});
-    } catch (e) { this.ctx = null; }
-  },
-  beep(f0,f1,dur,type,vol,at){
-    if (!this.ctx) return;
-    try {
-      const t0 = this.ctx.currentTime + (at || 0);
-      const o = this.ctx.createOscillator(), g = this.ctx.createGain();
-      o.type = type || 'sine';
-      o.frequency.setValueAtTime(Math.max(f0,1), t0);
-      if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t0 + dur);
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(vol || 0.15, t0 + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      o.connect(g); g.connect(this.ctx.destination);
-      o.start(t0); o.stop(t0 + dur + 0.05);
-    } catch (e) {}
-  },
-  noise(dur,freq,q,vol,slideTo,at){
-    if (!this.ctx || !this.nbuf) return;
-    try {
-      const t0 = this.ctx.currentTime + (at || 0);
-      const src = this.ctx.createBufferSource(); src.buffer = this.nbuf; src.loop = true;
-      const f = this.ctx.createBiquadFilter(); f.type = 'bandpass';
-      f.frequency.setValueAtTime(freq, t0);
-      if (slideTo) f.frequency.exponentialRampToValueAtTime(Math.max(slideTo,1), t0 + dur);
-      f.Q.value = q || 1;
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(vol || 0.2, t0 + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      src.connect(f); f.connect(g); g.connect(this.ctx.destination);
-      src.start(t0, Math.random() * 0.5); src.stop(t0 + dur + 0.05);
-    } catch (e) {}
+function wobblyPoly(pts,seed,amp,close){
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i++){
+    const x=jx(pts[i][0],seed+i*7.31,amp), y=jy(pts[i][1],seed+i*7.31,amp);
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
   }
-};
-const sfxPencil = () => { AU.noise(0.20, 2400, 2.5, 0.22, 800); };
-const sfxChomp  = () => { AU.beep(180, 65, 0.13, 'square', 0.14); AU.noise(0.08, 900, 1, 0.12); };
-const sfxGuma   = () => { AU.noise(0.38, 750, 1.4, 0.26, 260); };
-const sfxBell   = () => { AU.beep(1568, 1560, 0.9, 'sine', 0.13); AU.beep(2093, 2080, 0.7, 'sine', 0.08, 0.03); };
-const sfxBombGet= () => { AU.beep(320, 680, 0.16, 'triangle', 0.14); AU.noise(0.28, 3600, 3, 0.09, 0, 0.05); };
-const sfxBoom   = () => { AU.beep(130, 34, 0.5, 'sawtooth', 0.24); AU.noise(0.42, 260, 0.7, 0.28, 70); };
-const sfxBlot   = () => { AU.beep(290, 85, 0.28, 'sine', 0.17); };
-const sfxWarn   = () => { for (let i = 0; i < 5; i++) AU.beep(210 + (i%2)*75, 0, 0.05, 'square', 0.06, i*0.07); };
-const sfxCrunch = () => { AU.noise(0.32, 950, 0.8, 0.3, 140); AU.beep(150, 55, 0.26, 'triangle', 0.2); };
-const sfxStart  = () => { AU.beep(520, 940, 0.14, 'triangle', 0.1); };
-const sfxQ      = () => { AU.beep(720, 1050, 0.1, 'sine', 0.09); };
+  if(close)ctx.closePath();
+}
+function circlePts(cx,cy,r,seed,n,rjit){
+  const pts=[];
+  for(let i=0;i<n;i++){
+    const a=i/n*TAU;
+    const rr=r*(1+(n1(seed+i*3.7)*2-1)*(rjit||0.07));
+    pts.push([cx+Math.cos(a)*rr, cy+Math.sin(a)*rr]);
+  }
+  return pts;
+}
+function sketchStroke(pts,seed,amp,color,w,close,fill){
+  if(fill){wobblyPoly(pts,seed,amp,true);ctx.fillStyle=fill;ctx.fill();}
+  ctx.strokeStyle=color;ctx.lineWidth=w;ctx.lineJoin="round";ctx.lineCap="round";
+  wobblyPoly(pts,seed,amp,close);ctx.stroke();
+  ctx.globalAlpha*=0.45;
+  wobblyPoly(pts,seed+503.7,amp,close);ctx.lineWidth=w*0.75;ctx.stroke();
+  ctx.globalAlpha/=0.45;
+}
 
-// ===================== stav hry =====================
-function loadBest(){ try { const v = parseFloat(localStorage.getItem('svacina_best')); return isFinite(v) && v > 0 ? v : 0; } catch (e) { return 0; } }
-function saveBest(v){ try { localStorage.setItem('svacina_best', String(v)); } catch (e) {} }
+// ---------- storage (try/catch only) ----------
+function loadBest(){try{const v=localStorage.getItem("svacina_best");return v?parseFloat(v)||0:0;}catch(e){return 0;}}
+function saveBest(v){try{localStorage.setItem("svacina_best",String(v));}catch(e){}}
 
-const G = {
-  state: 'menu',       // menu | play | pause | dying | over
-  time: 0, grace: 0, dieT: 0, overT: 0,
-  cool: 0, coolMax: 4.5, coolShake: 0,
-  bomb: 0, best: loadBest(), newBest: false,
-  qTimer: 0, fakeTimer: -1, hintT: 0, round: 0,
+// ---------- audio ----------
+let actx=null, master=null;
+function initAudio(){
+  if(actx){if(actx.state==="suspended"){actx.resume().catch(()=>{});}return;}
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    actx=new AC();
+    master=actx.createGain();master.gain.value=0.4;master.connect(actx.destination);
+  }catch(e){}
+}
+function tone(f,dur,type,vol,f2){
+  if(!actx||actx.state!=="running")return;
+  try{
+    const t0=actx.currentTime;
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.type=type||"sine";o.frequency.setValueAtTime(f,t0);
+    if(f2)o.frequency.exponentialRampToValueAtTime(Math.max(20,f2),t0+dur);
+    g.gain.setValueAtTime(vol||0.2,t0);
+    g.gain.exponentialRampToValueAtTime(0.0008,t0+dur);
+    o.connect(g);g.connect(master);o.start(t0);o.stop(t0+dur+0.05);
+  }catch(e){}
+}
+function noiseBurst(dur,vol,f,q,type){
+  if(!actx||actx.state!=="running")return;
+  try{
+    const t0=actx.currentTime;
+    const len=Math.max(1,Math.floor(actx.sampleRate*dur));
+    const buf=actx.createBuffer(1,len,actx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);
+    const src=actx.createBufferSource();src.buffer=buf;
+    const fl=actx.createBiquadFilter();fl.type=type||"bandpass";fl.frequency.value=f;fl.Q.value=q||1;
+    const g=actx.createGain();g.gain.setValueAtTime(vol,t0);
+    g.gain.exponentialRampToValueAtTime(0.0008,t0+dur);
+    src.connect(fl);fl.connect(g);g.connect(master);src.start(t0);
+  }catch(e){}
+}
+const SND={
+  scratch(){noiseBurst(0.14,0.35,2100,1.4);noiseBurst(0.1,0.2,3400,2);},
+  eat(){tone(150,0.12,"square",0.14,90);noiseBurst(0.08,0.15,700,1,"lowpass");},
+  warn(){tone(95,0.16,"sawtooth",0.16,70);setTimeout(()=>tone(95,0.16,"sawtooth",0.16,70),170);},
+  guma(){noiseBurst(0.28,0.3,1500,0.8,"highpass");},
+  zvonek(){tone(1244,0.7,"sine",0.22);tone(1866,0.5,"sine",0.09);tone(831,0.4,"sine",0.07);},
+  bombGet(){tone(320,0.18,"square",0.15,160);tone(640,0.1,"square",0.06,320);},
+  boom(){noiseBurst(0.4,0.5,240,0.7,"lowpass");tone(70,0.42,"sine",0.35,38);},
+  kanka(){tone(230,0.22,"sine",0.2,85);tone(120,0.18,"sine",0.12,60);},
+  q(){tone(520,0.09,"triangle",0.1,700);},
+  krupnuti(){noiseBurst(0.22,0.5,420,0.6,"lowpass");tone(110,0.3,"sawtooth",0.18,45);},
 };
-const P = { x: 0, y: 0, vx: 0, vy: 0, rot: 0, r: 13, slow: false };
-const S = {
-  x: 0, y: 0, heading: 0, count: 9, path: [], segs: [],
-  mode: 'idle', modeT: 0, lungeT: 10, stun: 0, stunKind: '',
-  orbit: 0, brake: 0, shake: 0, seed: 5,
-};
-const fakes = [];      // {x,y,auto,bomb,seed,born}
-const questions = [];  // {x,y,age,life,seed}
-const blots = [];      // {x,y,r,pr[],drops[],seed}
-const parts = [];      // {x,y,vx,vy,age,life,color,r}
-const texts = [];      // {x,y,txt,age,life,color,size}
-const M = { x: 0, y: 0 };
-const keys = new Set();
 
-// ===================== papír (pozadí) =====================
-let paper = null;
+// ---------- layout ----------
+let W=800,H=600,dpr=1,SC=1;
+const paper=document.createElement("canvas");
+let paperSeed=Math.random()*1000;
+
 function buildPaper(){
-  paper = document.createElement('canvas');
-  paper.width = Math.max(1, Math.round(W * DPR));
-  paper.height = Math.max(1, Math.round(H * DPR));
-  const p = paper.getContext('2d');
-  p.scale(DPR, DPR);
-  p.fillStyle = PAPER; p.fillRect(0, 0, W, H);
-  const g = 30;
-  p.strokeStyle = 'rgba(115,155,200,0.30)'; p.lineWidth = 1;
+  paper.width=Math.max(1,Math.round(W*dpr));
+  paper.height=Math.max(1,Math.round(H*dpr));
+  const p=paper.getContext("2d");
+  p.setTransform(dpr,0,0,dpr,0,0);
+  const g=p.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,"#f8f4e9");g.addColorStop(1,"#f2edda");
+  p.fillStyle=g;p.fillRect(0,0,W,H);
+  // grid
+  p.strokeStyle="rgba(120,160,205,0.32)";p.lineWidth=1;
+  const cell=26;
   p.beginPath();
-  for (let x = g; x < W; x += g) { p.moveTo(x + .5, 0); p.lineTo(x + .5, H); }
-  for (let y = g; y < H; y += g) { p.moveTo(0, y + .5); p.lineTo(W, y + .5); }
+  for(let x=cell;x<W;x+=cell){p.moveTo(x+0.5,0);p.lineTo(x+0.5,H);}
+  for(let y=cell;y<H;y+=cell){p.moveTo(0,y+0.5);p.lineTo(W,y+0.5);}
   p.stroke();
-  // okraj stránky
-  const mx = Math.min(64, Math.round(W * 0.085));
-  p.strokeStyle = 'rgba(214,80,80,0.5)'; p.lineWidth = 1.6;
-  p.beginPath(); p.moveTo(mx + .5, 0); p.lineTo(mx + .5, H); p.stroke();
-  // ohmataná hrana + kávové kolečko
-  p.fillStyle = 'rgba(120,100,60,0.05)';
-  p.fillRect(W - 9, 0, 9, H); p.fillRect(0, H - 7, W, 7);
-  p.strokeStyle = 'rgba(150,110,60,0.10)'; p.lineWidth = 7;
-  p.beginPath(); p.arc(W - 88, H - 76, 33, 0, TAU); p.stroke();
+  // red margin line
+  const mx=Math.min(64,W*0.09);
+  p.strokeStyle="rgba(205,80,80,0.45)";p.lineWidth=1.4;
+  p.beginPath();p.moveTo(mx,0);p.lineTo(mx,H);p.moveTo(mx+4,0);p.lineTo(mx+4,H);p.stroke();
+  // page edge shading
+  p.fillStyle="rgba(90,80,60,0.06)";
+  p.fillRect(W-7,0,7,H);p.fillRect(0,H-6,W,6);
+  // --- doodles in margins (pencil) ---
+  const R=(a,b)=>a+n1(paperSeed+(a*3.1+b*7.7))* (b-a);
+  p.strokeStyle="rgba(105,105,105,0.5)";p.fillStyle="rgba(105,105,105,0.5)";
+  p.lineWidth=1.3;p.lineCap="round";p.font='13px '+HW;
+  // tic-tac-toe on the right edge (below the score note)
+  const tx=W-92,ty=Math.max(120,H*0.4),s=20;
+  p.beginPath();
+  p.moveTo(tx+s,ty);p.lineTo(tx+s+2,ty+3*s);
+  p.moveTo(tx+2*s,ty+1);p.lineTo(tx+2*s-2,ty+3*s);
+  p.moveTo(tx,ty+s);p.lineTo(tx+3*s,ty+s+2);
+  p.moveTo(tx+1,ty+2*s);p.lineTo(tx+3*s,ty+2*s-2);
+  p.stroke();
+  const marks=[["x",0,0],["o",1,1],["x",2,1],["o",0,2],["x",1,0]];
+  p.font='16px '+HW;
+  for(const m of marks)p.fillText(m[0],tx+m[1]*s+6,ty+m[2]*s+15);
+  // heart bottom-left of margin
+  p.save();p.translate(mx*0.5,H-70);p.rotate(-0.15);
+  p.beginPath();p.moveTo(0,4);
+  p.bezierCurveTo(-9,-6,-16,4,0,15);p.bezierCurveTo(16,4,9,-6,0,4);
+  p.stroke();p.font='11px '+HW;p.fillText("M+?",-11,28);p.restore();
+  // crossed-out vocabulary left margin
+  p.save();p.font='12.5px '+HW;
+  const words=["přírodopis","der Apfel","pololetí"];
+  let wy=Math.max(90,H*0.22);
+  for(const wtxt of words){
+    p.fillText(wtxt,8,wy);
+    const wl=p.measureText(wtxt).width;
+    p.beginPath();p.moveTo(6,wy-4);p.lineTo(10+wl,wy-3);p.stroke();
+    wy+=26;
+  }
+  p.restore();
+  // little sun top-left
+  p.save();p.translate(24,26);
+  p.beginPath();p.arc(0,0,7,0,TAU);p.stroke();
+  for(let i=0;i<8;i++){const a=i/8*TAU;p.beginPath();p.moveTo(Math.cos(a)*9,Math.sin(a)*9);p.lineTo(Math.cos(a)*13,Math.sin(a)*13);p.stroke();}
+  p.restore();
+  // "smazané" scribble near bottom-right
+  p.save();p.translate(W-60,H-40);p.rotate(0.1);
+  p.beginPath();
+  for(let i=0;i<14;i++){p.lineTo((n1(paperSeed+i*3)*2-1)*22,(n1(paperSeed+i*5+9)*2-1)*8);}
+  p.globalAlpha=0.35;p.stroke();p.restore();
 }
 
-// dekorace okrajů — kreslené každý frame (boiling)
-function drawDecor(){
-  const ph = boil;
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  if (W > 660) { // piškvorky vpravo nahoře
-    const bx = W - 128, by = 20, s = 26;
-    ctx.strokeStyle = PENCIL; ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    for (let i = 1; i < 3; i++) {
-      ctx.moveTo(bx + i*s + jit(31,i,ph,1.2), by); ctx.lineTo(bx + i*s + jit(32,i,ph,1.2), by + 3*s);
-      ctx.moveTo(bx, by + i*s + jit(33,i,ph,1.2)); ctx.lineTo(bx + 3*s, by + i*s + jit(34,i,ph,1.2));
-    }
-    ctx.stroke();
-    ctx.font = `bold 19px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const marks = [['x',0,0],['o',1,1],['x',2,2],['o',0,2],['x',2,0],['o',1,0]];
-    for (let i = 0; i < marks.length; i++) {
-      const m = marks[i];
-      ctx.fillStyle = m[0] === 'x' ? PENCIL : 'rgba(40,67,174,0.6)';
-      ctx.fillText(m[0], bx + m[1]*s + s/2 + jit(35,i,ph,1), by + m[2]*s + s/2 + jit(36,i,ph,1));
-    }
-  }
-  if (H > 560) { // srdíčko vlevo dole
-    const hx0 = 26, hy0 = H - 64;
-    ctx.strokeStyle = 'rgba(192,40,40,0.6)'; ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(hx0 + jit(41,0,ph,1), hy0 + 6);
-    ctx.bezierCurveTo(hx0 - 12, hy0 - 8, hx0 - 2 + jit(42,1,ph,1), hy0 - 16, hx0, hy0 - 6);
-    ctx.bezierCurveTo(hx0 + 2, hy0 - 16, hx0 + 12 + jit(43,2,ph,1), hy0 - 8, hx0, hy0 + 6);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(192,40,40,0.55)'; ctx.font = `13px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.fillText('M + ?', hx0 + 18, hy0 - 6 + jit(44,3,ph,0.8));
-  }
-  if (W > 520) { // škrtnuté slovíčko vpravo dole
-    const wx = W - 165, wy = H - 40;
-    ctx.fillStyle = PENCIL; ctx.font = `14px ${FONT}`; ctx.textAlign = 'left';
-    ctx.fillText('die Schlange', wx, wy + jit(45,1,ph,0.7));
-    ctx.strokeStyle = PENCIL; ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(wx - 3, wy + jit(46,2,ph,1)); ctx.lineTo(wx + 92, wy - 2 + jit(47,3,ph,1)); ctx.stroke();
-    ctx.fillStyle = 'rgba(192,40,40,0.7)';
-    ctx.fillText('HAD!!!', wx + 100, wy + jit(48,4,ph,0.8));
-  }
-  ctx.restore();
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-}
-
-// ===================== čmárací pomocníci =====================
-function wob(cx,cy,r,seed,amp,pts){
-  pts = pts || 12;
-  ctx.beginPath();
-  for (let i = 0; i <= pts; i++) {
-    const k = i % pts, a = i / pts * TAU;
-    const rr = r + jit(seed, k, boil, amp);
-    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
-    if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-  }
-  ctx.closePath();
-}
-function wobEllipse(cx,cy,rx,ry,seed,amp,pts){
-  pts = pts || 18;
-  ctx.beginPath();
-  for (let i = 0; i <= pts; i++) {
-    const k = i % pts, a = i / pts * TAU;
-    const jx = jit(seed, k, boil, amp), jy = jit(seed + 3, k, boil, amp);
-    const x = cx + Math.cos(a) * (rx + jx), y = cy + Math.sin(a) * (ry + jy);
-    if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-  }
-  ctx.closePath();
-}
-function wavyLine(x0,y0,x1,y1,seed,amp,segs){
-  segs = segs || 8;
-  ctx.beginPath();
-  for (let i = 0; i <= segs; i++) {
-    const t = i / segs;
-    const x = lerp(x0,x1,t) + (i && i < segs ? jit(seed,i,boil,amp) : 0);
-    const y = lerp(y0,y1,t) + (i && i < segs ? jit(seed+9,i,boil,amp) : 0);
-    if (i) ctx.lineTo(x,y); else ctx.moveTo(x,y);
-  }
-}
-
-// ===================== rozměry =====================
 function resize(){
-  W = Math.max(1, window.innerWidth);
-  H = Math.max(1, window.innerHeight);
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  cv.width = Math.round(W * DPR);
-  cv.height = Math.round(H * DPR);
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  SCL = clamp(Math.min(W, H) / 760, 0.72, 1.1);
-  P.r = C.pR * SCL;
+  W=window.innerWidth;H=window.innerHeight;
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  SC=clamp(Math.min(W,H)/700,0.62,1.05);
   buildPaper();
-  // po změně velikosti zarovnej objekty zpět do plochy
-  P.x = clamp(P.x, P.r, W - P.r); P.y = clamp(P.y, P.r, H - P.r);
-  S.x = clamp(S.x, 16, W - 16); S.y = clamp(S.y, 16, H - 16);
-  for (const f of fakes) { f.x = clamp(f.x, 20, W - 20); f.y = clamp(f.y, 20, H - 20); }
-  for (const q of questions) { q.x = clamp(q.x, 40, W - 40); q.y = clamp(q.y, 40, H - 40); }
-  for (const b of blots) { b.x = clamp(b.x, b.r + 20, W - b.r - 20); b.y = clamp(b.y, b.r + 20, H - b.r - 20); }
-  if (M.x === 0 && M.y === 0) { M.x = W/2; M.y = H/2; }
+  if(G){
+    // keep everything inside the new bounds
+    const cl=(o,r)=>{o.x=clamp(o.x,r+12,W-r-12);o.y=clamp(o.y,r+12,H-r-12);};
+    cl(G.player,14);cl(G.snake,12);
+    for(const f of G.fakes)cl(f,12);
+    for(const q of G.qmarks)cl(q,26);
+    for(const b of G.inks)cl(b,b.r*0.7);
+    G.player.tx=clamp(G.player.tx,20,W-20);
+    G.player.ty=clamp(G.player.ty,20,H-20);
+  }
 }
 
-// ===================== kaňky =====================
-function makeBlot(x,y,r){
-  const pr = [], n = 18;
-  for (let i = 0; i < n; i++) pr.push(rnd(0.82, 1.14));
-  const drops = [];
-  const dn = 2 + (Math.random() * 2 | 0);
-  for (let i = 0; i < dn; i++) {
-    const a = rnd(0, TAU), d = r * rnd(1.1, 1.45);
-    drops.push({ dx: Math.cos(a)*d, dy: Math.sin(a)*d, r: rnd(2.5, 6) * SCL });
+// ---------- game state ----------
+const PR=13, SEG_R=9, HEAD_R=11.5, SEG_SPACING=13;
+const PENCIL_CD=4.0;
+let G=null;
+let best=loadBest();
+
+function newGame(){
+  paperSeed=Math.random()*1000;
+  buildPaper();
+  const px=W/2, py=H*0.6;
+  const sx=W*0.85, sy=Math.max(40,H*0.12);
+  const ang=Math.atan2(py-sy,px-sx);
+  const g={
+    state:"menu",
+    time:0,
+    grace:2.0,
+    player:{x:px,y:py,vx:0,vy:0,rot:0,tx:px,ty:py,keys:{},keyMode:false,inInk:false},
+    snake:{
+      x:sx,y:sy,ang,segs:10,trail:[],
+      phase:"idle",phaseT:0,lungeT:rand(8,14),lungeAng:0,
+      stun:0,stunKind:"",tgtKey:"",bestDist:1e9,noProg:0,burst:0,
+      tx:px,ty:py,
+    },
+    fakes:[],autoTimers:[],
+    inks:[],
+    qmarks:[],qTimer:rand(3,6),
+    pencilCd:0,bombStock:0,
+    texts:[],
+    shake:0,
+    noAutoPause:false,
+    finalTime:0,
+  };
+  // prefill trail behind the head (line pointing away from travel)
+  const bx=Math.cos(ang+Math.PI), by=Math.sin(ang+Math.PI);
+  const len=SEG_SPACING*(g.segsInit=g.snake.segs+2);
+  for(let d=len;d>=0;d-=4){
+    g.snake.trail.push({x:clamp(sx+bx*d,6,W-6),y:clamp(sy+by*d,6,H-6)});
   }
-  return { x, y, r, pr, drops, seed: rnd(1, 999) };
+  spawnInks(g);
+  spawnAutoFake(g,true);
+  return g;
 }
-function placeBlot(marginMul, protectCenter){
-  for (let t = 0; t < 260; t++) {
-    const r = rnd(42, 64) * SCL;
-    const m = 105 * SCL * marginMul + r;
-    if (W - 2*m < 40 || H - 2*m < 40) continue;
-    const x = rnd(m, W - m), y = rnd(m, H - m);
-    if (protectCenter && hyp(x - W/2, y - H/2) < 190 * SCL) continue;   // spawn hráče
-    if (hyp(x - S.x, y - S.y) < 170 * SCL) continue;                     // u hada ne
-    if (hyp(x - P.x, y - P.y) < 170 * SCL) continue;
-    let ok = true;
-    for (const b of blots) if (hyp(x - b.x, y - b.y) < b.r + r + 165 * SCL) { ok = false; break; }
-    if (ok) return makeBlot(x, y, r);
-  }
-  return null;
-}
-function makeBlots(){
-  blots.length = 0;
-  const small = Math.min(W, H) < 560 || W * H < 430000;
-  const n = small ? 2 : (Math.random() < 0.45 ? 5 : 4);
-  for (let i = 0; i < n; i++) {
-    const b = placeBlot(1, true);
-    if (b) blots.push(b);
+
+function spawnInks(g){
+  const small=Math.min(W,H)<600||W*H<430000;
+  const count=small?2:(4+Math.floor(Math.random()*2));
+  const margin=Math.max(90,Math.min(W,H)*0.14);
+  for(let k=0;k<count;k++){
+    const r=(small?rand(34,50):rand(44,66))*clamp(SC+0.15,0.7,1.1);
+    let x=0,y=0,ok=false;
+    for(let tries=0;tries<60&&!ok;tries++){
+      x=rand(margin+r,W-margin-r);y=rand(margin+r,H-margin-r);
+      ok=true;
+      for(const b of g.inks)if(dist(x,y,b.x,b.y)<b.r+r+130){ok=false;break;}
+      if(dist(x,y,g.player.x,g.player.y)<r+120)ok=false;
+    }
+    if(ok)g.inks.push(mkInk(x,y,r));
   }
 }
-function addBlot(){
-  const b = placeBlot(0.7, false);
-  if (b) blots.push(b);
-  return !!b;
+function mkInk(x,y,r){
+  const seed=Math.random()*1000;
+  const drops=[];
+  const nd=1+Math.floor(Math.random()*3);
+  for(let i=0;i<nd;i++){
+    const a=rand(0,TAU);
+    drops.push({x:Math.cos(a)*(r+rand(8,22)),y:Math.sin(a)*(r+rand(8,22)),r:rand(3,7)});
+  }
+  return {x,y,r,seed,drops};
 }
-function inBlot(x,y){
-  for (const b of blots) if (hyp(x - b.x, y - b.y) < b.r * 0.95) return true;
+function addInkFromQ(g){
+  const margin=70;
+  for(let tries=0;tries<80;tries++){
+    const relax=tries/80;
+    const r=rand(38,58)*clamp(SC+0.15,0.7,1.1);
+    const x=rand(margin+r,W-margin-r),y=rand(margin+r,H-margin-r);
+    let ok=dist(x,y,g.player.x,g.player.y)>r+90*(1-relax*0.5);
+    if(ok)for(const b of g.inks)if(dist(x,y,b.x,b.y)<(b.r+r+120)*(1-relax*0.6)){ok=false;break;}
+    if(ok){g.inks.push(mkInk(x,y,r));return true;}
+  }
   return false;
 }
 
-// ===================== falešná jablka a otazníky =====================
-function spawnAutoFake(){
-  for (let t = 0; t < 200; t++) {
-    const x = rnd(50, W - 50), y = rnd(50, H - 50);
-    if (hyp(x - S.x, y - S.y) < 260 * SCL) continue;
-    if (hyp(x - P.x, y - P.y) < 90 * SCL) continue;
-    fakes.push({ x, y, auto: true, bomb: false, seed: rnd(1, 999), born: now });
-    sfxPencil();
-    return;
+function countAuto(g){let n=0;for(const f of g.fakes)if(f.auto)n++;return n;}
+function spawnAutoFake(g,force){
+  if(countAuto(g)>=2)return;
+  const m=70;
+  let x=W/2,y=H/2;
+  for(let tries=0;tries<70;tries++){
+    x=rand(m,W-m);y=rand(m,H-m);
+    if(dist(x,y,g.snake.x,g.snake.y)<(force?150:260*SC))continue;
+    if(dist(x,y,g.player.x,g.player.y)<80)continue;
+    break;
   }
-  fakes.push({ x: rnd(60, W - 60), y: rnd(60, H - 60), auto: true, bomb: false, seed: rnd(1, 999), born: now });
+  g.fakes.push({x,y,auto:true,bomb:false,seed:Math.random()*1000,age:0});
 }
-function tryDrawFake(x,y){
-  if (G.cool > 0) { G.coolShake = 0.35; return; }
-  const f = { x: clamp(x, 22, W - 22), y: clamp(y, 22, H - 22), auto: false, bomb: G.bomb > 0, seed: rnd(1, 999), born: now };
-  if (f.bomb) G.bomb = 0;
-  fakes.push(f);
-  G.cool = G.coolMax;
-  sfxPencil();
-  for (let i = 0; i < 6; i++) parts.push({ x: f.x, y: f.y, vx: rnd(-40, 40), vy: rnd(-50, 10), age: 0, life: 0.5, color: PENCIL, r: rnd(1, 2.4) });
+function drawFakeByPlayer(g,x,y){
+  if(g.pencilCd>0)return;
+  x=clamp(x,24,W-24);y=clamp(y,24,H-24);
+  const bomb=g.bombStock>0;
+  if(bomb)g.bombStock=0;
+  g.fakes.push({x,y,auto:false,bomb,seed:Math.random()*1000,age:0});
+  g.pencilCd=PENCIL_CD;
+  SND.scratch();
 }
-function spawnQuestion(){
-  for (let t = 0; t < 200; t++) {
-    const x = rnd(70, W - 70), y = rnd(70, H - 70);
-    if (hyp(x - S.x, y - S.y) < 210 * SCL) continue;
-    if (hyp(x - P.x, y - P.y) < 110 * SCL) continue;
-    questions.push({ x, y, age: 0, life: 9, seed: rnd(1, 999) });
-    sfxQ();
-    return;
+
+function spawnQ(g){
+  if(g.qmarks.length>=2)return;
+  const m=80;
+  let x=W/2,y=H/2;
+  for(let tries=0;tries<60;tries++){
+    x=rand(m,W-m);y=rand(m,H-m);
+    if(dist(x,y,g.snake.x,g.snake.y)<200*SC)continue;
+    if(dist(x,y,g.player.x,g.player.y)<70)continue;
+    break;
   }
+  g.qmarks.push({x,y,life:rand(8,10),seed:Math.random()*1000});
 }
-function addText(x,y,txt,color,size){
-  texts.push({ x, y, txt, age: 0, life: 1.5, color: color || RED, size: size || 21 });
+
+function addText(g,x,y,txt,color){
+  g.texts.push({x,y,txt,color,age:0});
 }
-function applyQuestion(q){
-  let r = Math.random(), eff;
-  if (r < 0.26) eff = 'guma';
-  else if (r < 0.52) eff = 'zvonek';
-  else if (r < 0.78) eff = 'bomba';
-  else eff = 'kanka';
-  if (eff === 'bomba' && G.bomb > 0) eff = Math.random() < 0.5 ? 'guma' : 'zvonek';
-  if (eff === 'kanka' && !addBlot()) eff = 'guma';
-  switch (eff) {
-    case 'guma': {
-      const tail = S.segs[S.segs.length - 1] || S;
-      S.count = Math.max(5, S.count - 5);
-      for (let i = 0; i < 10; i++) parts.push({ x: tail.x, y: tail.y, vx: rnd(-60, 60), vy: rnd(-60, 60), age: 0, life: 0.6, color: '#b9bdc9', r: rnd(1.5, 3.5) });
-      addText(q.x, q.y - 26 * SCL, 'GUMA!'); sfxGuma(); break;
+
+// ---------- grading ----------
+function grade(t){
+  if(t<15)return{g:"5",p:false,c:"Sedni si. Pětka. A příště si ke mně nechoď ani pro křídu."};
+  if(t<30)return{g:"4",p:false,c:"Dostatečně. Had se u tebe ani nezadýchal."};
+  if(t<60)return{g:"3",p:false,c:"Dobře. Průměr — přesně jako tvoje pololetí."};
+  if(t<120)return{g:"2",p:false,c:"Chvalitebně! Tohle už můžeš ukázat i rodičům."};
+  if(t<210)return{g:"1",p:false,c:"Výborně! Beru tě na krajské kolo v uhýbání."};
+  return{g:"POCHVALA ŘEDITELE ŠKOLY",p:true,c:"Neuvěřitelné. Ve sborovně se o tobě šeptá. Ředitel osobně stiskl razítko."};
+}
+
+// ---------- input ----------
+function canvasPos(e){
+  const r=cv.getBoundingClientRect();
+  return {x:e.clientX-r.left,y:e.clientY-r.top};
+}
+cv.addEventListener("mousemove",e=>{
+  if(!G)return;
+  const p=canvasPos(e);
+  G.player.tx=p.x;G.player.ty=p.y;G.player.keyMode=false;
+});
+cv.addEventListener("mousedown",e=>{
+  initAudio();
+  if(!G||G.state!=="play")return;
+  const p=canvasPos(e);
+  G.player.tx=p.x;G.player.ty=p.y;G.player.keyMode=false;
+  drawFakeByPlayer(G,p.x,p.y);
+});
+cv.addEventListener("contextmenu",e=>e.preventDefault());
+
+let touchInfo=null;
+cv.addEventListener("touchstart",e=>{
+  e.preventDefault();initAudio();
+  if(!G)return;
+  const t=e.changedTouches[0];
+  const r=cv.getBoundingClientRect();
+  const x=t.clientX-r.left,y=t.clientY-r.top;
+  touchInfo={x0:x,y0:y,t0:performance.now(),moved:0,id:t.identifier};
+  G.player.tx=x;G.player.ty=y;G.player.keyMode=false;
+},{passive:false});
+cv.addEventListener("touchmove",e=>{
+  e.preventDefault();
+  if(!G)return;
+  const t=e.changedTouches[0];
+  const r=cv.getBoundingClientRect();
+  const x=t.clientX-r.left,y=t.clientY-r.top;
+  if(touchInfo)touchInfo.moved=Math.max(touchInfo.moved,dist(x,y,touchInfo.x0,touchInfo.y0));
+  G.player.tx=x;G.player.ty=y;G.player.keyMode=false;
+},{passive:false});
+cv.addEventListener("touchend",e=>{
+  e.preventDefault();
+  if(!G||!touchInfo)return;
+  const t=e.changedTouches[0];
+  const r=cv.getBoundingClientRect();
+  const x=t.clientX-r.left,y=t.clientY-r.top;
+  const dur=performance.now()-touchInfo.t0;
+  if(G.state==="play"&&dur<280&&touchInfo.moved<16){
+    drawFakeByPlayer(G,x,y);
+  }
+  touchInfo=null;
+},{passive:false});
+
+const KEYMAP={ArrowUp:"u",ArrowDown:"d",ArrowLeft:"l",ArrowRight:"r",w:"u",s:"d",a:"l",d:"r",W:"u",S:"d",A:"l",D:"r"};
+window.addEventListener("keydown",e=>{
+  initAudio();
+  if(!G)return;
+  const k=KEYMAP[e.key];
+  if(k){G.player.keys[k]=true;G.player.keyMode=true;e.preventDefault();}
+  if(e.key==="p"||e.key==="P"){
+    if(G.state==="play")setPause(true);
+    else if(G.state==="pause")setPause(false);
+  }
+  if(e.key===" "||e.key==="Enter"){
+    if(G.state==="menu"){startGame();e.preventDefault();}
+    else if(G.state==="over"){startGame();e.preventDefault();}
+    else if(G.state==="pause"){setPause(false);e.preventDefault();}
+  }
+  if((e.key==="r"||e.key==="R")&&G.state==="over")startGame();
+  if(e.key==="Escape"&&G.state==="play")setPause(true);
+});
+window.addEventListener("keyup",e=>{
+  if(!G)return;
+  const k=KEYMAP[e.key];
+  if(k)G.player.keys[k]=false;
+});
+window.addEventListener("blur",()=>{
+  if(G&&G.state==="play"&&!G.noAutoPause)setPause(true);
+});
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden&&G&&G.state==="play"&&!G.noAutoPause)setPause(true);
+});
+window.addEventListener("resize",resize);
+
+// ---------- UI plumbing ----------
+const el=id=>document.getElementById(id);
+function show(id,on){el(id).classList.toggle("hidden",!on);}
+function refreshMenuBest(){
+  el("menuBest").textContent=best>0?("Rekord: "+Math.floor(best)+" s"):"Zatím žádný rekord. Sešit je čistý.";
+}
+el("btnStart").addEventListener("click",()=>{initAudio();startGame();});
+el("btnAgain").addEventListener("click",()=>{initAudio();startGame();});
+el("btnResume").addEventListener("click",()=>{initAudio();setPause(false);});
+el("btnPauseMenu").addEventListener("click",()=>toMenu());
+el("btnOverMenu").addEventListener("click",()=>toMenu());
+
+function startGame(){
+  G=newGame();
+  G.state="play";
+  show("menu",false);show("pause",false);show("over",false);
+}
+function toMenu(){
+  G=newGame();
+  G.state="menu";
+  refreshMenuBest();
+  show("menu",true);show("pause",false);show("over",false);
+}
+function setPause(on){
+  if(!G)return;
+  if(on&&G.state==="play"){G.state="pause";show("pause",true);}
+  else if(!on&&G.state==="pause"){G.state="play";show("pause",false);lastT=performance.now();}
+}
+function endGame(){
+  G.state="over";
+  G.finalTime=G.time;
+  SND.krupnuti();
+  const gr=grade(G.time);
+  el("overCas").textContent="Čas přežití: "+Math.floor(G.time)+" s";
+  const ge=el("overGrade");
+  ge.textContent=gr.g;
+  ge.classList.toggle("pochvala",gr.p);
+  el("overKoment").textContent="„"+gr.c+"“";
+  const isNew=G.time>best&&best>0;
+  const firstRecord=best===0&&G.time>0;
+  if(G.time>best){best=G.time;saveBest(best);}
+  el("overNovy").classList.toggle("hidden",!(isNew||firstRecord));
+  el("overRekord").textContent=best>0?("Rekord: "+Math.floor(best)+" s"):"";
+  show("over",true);
+}
+
+// ---------- snake logic ----------
+function snakeBaseSpeed(t){
+  let v;
+  if(t<60)v=190+(262-190)*(t/60);
+  else v=262+(t-60)*0.16;
+  if(t>120)v+=(t-120)*0.05;
+  return v*SC;
+}
+function lungeMult(t){return 1.7+clamp(t/240,0,1)*0.55;}
+function nextLungeInterval(t){
+  const base=rand(8,14);
+  const f=clamp(1-t/260,0.22,1);
+  return base*f;
+}
+function pickTarget(g){
+  const s=g.snake;
+  let bx=g.player.x,by=g.player.y,bd=dist(s.x,s.y,g.player.x,g.player.y),key="P",isPlayer=true;
+  for(let i=0;i<g.fakes.length;i++){
+    const f=g.fakes[i];
+    const d=dist(s.x,s.y,f.x,f.y);
+    if(d<bd){bd=d;bx=f.x;by=f.y;key="F"+f.seed.toFixed(3);isPlayer=false;}
+  }
+  // predictive aim at the player (ramps in from 60 s)
+  if(isPlayer&&g.time>60){
+    const f=clamp((g.time-60)/15,0,1);
+    const lead=clamp(bd/Math.max(60,snakeBaseSpeed(g.time)),0,0.55)*f;
+    bx=clamp(bx+g.player.vx*lead,10,W-10);
+    by=clamp(by+g.player.vy*lead,10,H-10);
+  }
+  return{bx,by,bd,key,isPlayer};
+}
+function updateSnake(g,dt){
+  const s=g.snake;
+  if(s.stun>0){s.stun-=dt;return;}
+  const tgt=pickTarget(g);
+  s.tx=tgt.bx;s.ty=tgt.by;
+  if(tgt.key!==s.tgtKey){s.tgtKey=tgt.key;s.bestDist=1e9;s.noProg=0;}
+
+  // lunge state machine (no lunges during the protective grace period)
+  if(s.phase==="idle"){
+    if(g.grace<=0)s.lungeT-=dt;
+    if(s.lungeT<=0){s.phase="tele";s.phaseT=0.5;SND.warn();}
+  }else if(s.phase==="tele"){
+    s.phaseT-=dt;
+    if(s.phaseT<=0){
+      s.phase="go";s.phaseT=0.95;
+      s.lungeAng=Math.atan2(tgt.by-s.y,tgt.bx-s.x);
     }
-    case 'zvonek':
-      S.stun = Math.max(S.stun, 2); S.stunKind = 'bell'; S.mode = 'idle'; S.shake = 0;
-      addText(q.x, q.y - 26 * SCL, 'PŘESTÁVKA!'); sfxBell(); break;
-    case 'bomba':
-      G.bomb = 1;
-      addText(q.x, q.y - 26 * SCL, 'BOMBOVÉ JABLKO!'); sfxBombGet(); break;
-    case 'kanka':
-      addText(q.x, q.y - 26 * SCL, 'NOVÁ KAŇKA!'); sfxBlot(); break;
+  }else if(s.phase==="go"){
+    s.phaseT-=dt;
+    if(s.phaseT<=0){s.phase="idle";s.lungeT=nextLungeInterval(g.time);}
   }
-}
 
-// ===================== kolo =====================
-function startRound(){
-  G.state = 'play'; G.time = 0; G.grace = C.grace; G.dieT = 0; G.overT = 0;
-  G.cool = 0; G.coolShake = 0; G.bomb = 0; G.newBest = false;
-  G.qTimer = rnd(4.5, 7); G.fakeTimer = -1;
-  G.round++;
-  G.hintT = G.round === 1 ? 9 : 0;
-  parts.length = 0; texts.length = 0; fakes.length = 0; questions.length = 0;
-  P.x = W / 2; P.y = H / 2; P.vx = 0; P.vy = 0; P.rot = 0; P.r = C.pR * SCL;
-  M.x = W / 2; M.y = H / 2;
-  // had do rohu
-  S.x = W - 70; S.y = 70;
-  S.heading = Math.atan2(H/2 - S.y, W/2 - S.x);
-  S.count = 9; S.stun = 0; S.stunKind = '';
-  S.mode = 'idle'; S.modeT = 0; S.lungeT = rnd(8, 14);
-  S.orbit = 0; S.brake = 0; S.shake = 0;
-  S.path = [{ x: S.x, y: S.y }];
-  const back = S.heading + Math.PI;
-  const need = Math.ceil((S.count + 3) * C.segSp * SCL / 4) + 8;
-  for (let i = 1; i <= need; i++)
-    S.path.push({ x: S.x + Math.cos(back) * i * 4, y: S.y + Math.sin(back) * i * 4 });
-  makeBlots();
-  computeSegs();
-  spawnAutoFake();
-  sfxStart();
-}
-function pauseGame(){ if (G.state === 'play') G.state = 'pause'; }
-function resumeGame(){ if (G.state === 'pause') { G.state = 'play'; G.grace = Math.max(G.grace, 1); } }
-function die(){
-  G.state = 'dying'; G.dieT = 0;
-  if (G.time > G.best) { G.best = G.time; G.newBest = true; saveBest(G.time); }
-  sfxCrunch();
-  for (let i = 0; i < 16; i++)
-    parts.push({ x: P.x, y: P.y, vx: rnd(-130, 130), vy: rnd(-130, 130), age: 0, life: 0.8, color: RED, r: rnd(1.5, 4) * SCL });
-}
-function gradeOf(t){
-  if (t < 15)  return { mark: '5',  txt: 'Sedni si. A zítra ať přijdou rodiče.' };
-  if (t < 30)  return { mark: '4',  txt: 'Had se ani nezadýchal. V úterý doučování.' };
-  if (t < 60)  return { mark: '3',  txt: 'Průměr. Přesně jako tvoje pololetí.' };
-  if (t < 120) return { mark: '2',  txt: 'No vida, ono to jde, když se snažíš!' };
-  if (t < 210) return { mark: '1',  txt: 'Výborně! Kdybys takhle sprintoval i na tělocviku…' };
-  if (t < 330) return { mark: '1*', txt: 'Jednička s hvězdičkou! Tohle si vystavím na nástěnku.' };
-  return { mark: 'POCHVALA ŘEDITELE ŠKOLY', txt: 'Ředitel ti jde potřást rukou. Had si podal výpověď.' };
-}
-
-// ===================== update =====================
-function keyDir(){
-  let x = 0, y = 0;
-  if (keys.has('arrowleft') || keys.has('a')) x -= 1;
-  if (keys.has('arrowright') || keys.has('d')) x += 1;
-  if (keys.has('arrowup') || keys.has('w')) y -= 1;
-  if (keys.has('arrowdown') || keys.has('s')) y += 1;
-  if (!x && !y) return null;
-  const l = hyp(x, y);
-  return { x: x / l, y: y / l };
-}
-
-function updatePlayer(dt){
-  const kd = keyDir();
-  const acc = C.pAcc * SCL;
-  let ax = 0, ay = 0;
-  if (kd) { ax = kd.x * acc; ay = kd.y * acc; }
-  else {
-    const dx = M.x - P.x, dy = M.y - P.y, d = hyp(dx, dy);
-    if (d > 3) {
-      const f = acc * clamp(d / (80 * SCL), 0.15, 1);
-      ax = dx / d * f; ay = dy / d * f;
+  let speed=snakeBaseSpeed(g.time);
+  if(s.phase==="go"){
+    s.ang=s.lungeAng;
+    speed*=lungeMult(g.time);
+  }else{
+    if(s.phase==="tele")speed*=0.85;
+    let des=Math.atan2(tgt.by-s.y,tgt.bx-s.x);
+    const d=tgt.bd;
+    // during grace the snake circles at a respectful distance instead of camping
+    if(g.grace>0&&tgt.isPlayer&&d<260){
+      const aP=Math.atan2(s.y-g.player.y,s.x-g.player.x);
+      const ox=g.player.x+Math.cos(aP+0.5)*265;
+      const oy=g.player.y+Math.sin(aP+0.5)*265;
+      des=Math.atan2(oy-s.y,ox-s.x);
     }
-  }
-  let drag = C.pDrag, am = 1;
-  P.slow = inBlot(P.x, P.y);
-  if (P.slow) { am = 0.55; drag *= 1.45; }
-  P.vx += (ax * am - P.vx * drag) * dt;
-  P.vy += (ay * am - P.vy * drag) * dt;
-  P.x += P.vx * dt; P.y += P.vy * dt;
-  if (P.x < P.r) { P.x = P.r; P.vx = Math.max(P.vx, 0); }
-  if (P.x > W - P.r) { P.x = W - P.r; P.vx = Math.min(P.vx, 0); }
-  if (P.y < P.r) { P.y = P.r; P.vy = Math.max(P.vy, 0); }
-  if (P.y > H - P.r) { P.y = H - P.r; P.vy = Math.min(P.vy, 0); }
-  P.rot += (P.vx + P.vy * 0.35) * dt / P.r;
-}
-
-function snakeSpeed(t){
-  return (140 + 105 * Math.pow(Math.min(t / 60, 1), 0.9) + 0.16 * Math.max(0, t - 60)) * SCL;
-}
-function nextLungeIn(t){
-  const base = lerp(10.5, 3.2, Math.min(t / 260, 1));
-  return base * rnd(0.75, 1.25);
-}
-
-function computeSegs(){
-  const sp = C.segSp * SCL;
-  const out = [{ x: S.x, y: S.y }];
-  let remain = sp;
-  let prev = S.path[0];
-  for (let i = 1; i < S.path.length && out.length < S.count; i++) {
-    let p = S.path[i];
-    let dx = p.x - prev.x, dy = p.y - prev.y;
-    let segLen = hyp(dx, dy);
-    while (segLen >= remain && out.length < S.count) {
-      const t = remain / segLen;
-      const nx = prev.x + dx * t, ny = prev.y + dy * t;
-      out.push({ x: nx, y: ny });
-      prev = { x: nx, y: ny };
-      dx = p.x - prev.x; dy = p.y - prev.y;
-      segLen = hyp(dx, dy);
-      remain = sp;
-    }
-    if (out.length >= S.count) break;
-    remain -= segLen;
-    prev = p;
-  }
-  while (out.length < S.count) out.push({ x: out[out.length-1].x, y: out[out.length-1].y });
-  S.segs = out;
-}
-
-function updateSnake(dt){
-  const t = G.time;
-  const spd = snakeSpeed(t);
-
-  if (S.stun > 0) {
-    S.stun -= dt;
-    if (S.stun <= 0) S.stunKind = '';
-    computeSegs();
-    return;
+    // turn rate: faster snake => wider arc; near target => much sharper
+    let omega=3.1*Math.pow((205*SC)/Math.max(60,speed),1.25);
+    if(d<150)omega*=1+2.6*(150-d)/150;
+    // anti-orbit last resort
+    if(d<s.bestDist-4){s.bestDist=d;s.noProg=0;}
+    else if(g.grace<=0)s.noProg+=dt;
+    else s.noProg=0;
+    if(s.burst>0){s.burst-=dt;omega*=3.2;speed*=0.72;}
+    else if(s.noProg>2.2&&d>36){s.burst=0.6;s.noProg=0;}
+    const diff=angNorm(des-s.ang);
+    s.ang+=clamp(diff,-omega*dt,omega*dt);
   }
 
-  // cíl: nejbližší lákadlo — falešné jablko, když je blíž než hráč
-  const pd = hyp(P.x - S.x, P.y - S.y);
-  let tx = P.x, ty = P.y, lure = null, best = pd;
-  for (const f of fakes) {
-    const d = hyp(f.x - S.x, f.y - S.y);
-    if (d < best) { best = d; lure = f; tx = f.x; ty = f.y; }
-  }
-  if (!lure && t >= 60) { // nadbíhání
-    const lead = Math.min(0.55, pd / spd);
-    tx = clamp(P.x + P.vx * lead, 20, W - 20);
-    ty = clamp(P.y + P.vy * lead, 20, H - 20);
-  }
-  const td = hyp(tx - S.x, ty - S.y);
+  const nx=s.x+Math.cos(s.ang)*speed*dt;
+  const ny=s.y+Math.sin(s.ang)*speed*dt;
+  const m=8;
+  let hitWall=false;
+  s.x=clamp(nx,m,W-m);s.y=clamp(ny,m,H-m);
+  if(s.x!==nx||s.y!==ny)hitWall=true;
+  if(hitWall&&s.phase==="go"){s.phase="idle";s.phaseT=0;s.lungeT=nextLungeInterval(g.time);}
 
-  // výpady
-  S.shake = 0;
-  let moveSpd = spd, turning = true, turnMul = 1;
-  if (S.mode === 'idle') {
-    S.lungeT -= dt;
-    if (S.lungeT <= 0) { S.mode = 'tele'; S.modeT = 0.5; sfxWarn(); }
-  }
-  if (S.mode === 'tele') {
-    S.modeT -= dt;
-    moveSpd = spd * 0.25; turnMul = 0.4; S.shake = 1;
-    if (S.modeT <= 0) {
-      S.mode = 'sprint'; S.modeT = 0.95;
-      S.heading = Math.atan2(ty - S.y, tx - S.x);
-    }
-  } else if (S.mode === 'sprint') {
-    S.modeT -= dt;
-    moveSpd = spd * 1.7 * (1 + 0.3 * Math.min(t / 240, 1));
-    turning = false;
-    if (S.modeT <= 0) { S.mode = 'idle'; S.lungeT = nextLungeIn(t); }
-  }
-  if (S.brake > 0) { S.brake -= dt; moveSpd *= 0.5; }
-
-  if (turning) {
-    const des = Math.atan2(ty - S.y, tx - S.x);
-    const dd = angDiff(S.heading, des);
-    let tr = (560 * SCL) / Math.max(moveSpd, 40 * SCL);           // rychlejší = širší oblouk
-    tr *= (1 + 1.6 * clamp(1 - td / (180 * SCL), 0, 1));           // blízko cíle ostřeji
-    if (td < 95 * SCL) tr = Math.max(tr, moveSpd / Math.max(td * 0.48, 6)); // dotáhne se, žádné věčné kroužení
-    tr *= turnMul;
-    S.heading += clamp(dd, -tr * dt, tr * dt);
+  // trail
+  const last=s.trail[s.trail.length-1];
+  if(!last||dist(last.x,last.y,s.x,s.y)>1.2)s.trail.push({x:s.x,y:s.y});
+  // prune trail
+  const maxNeed=SEG_SPACING*(s.segs+2)+80;
+  let acc=0;
+  for(let i=s.trail.length-1;i>0;i--){
+    acc+=dist(s.trail[i].x,s.trail[i].y,s.trail[i-1].x,s.trail[i-1].y);
+    if(acc>maxNeed){s.trail.splice(0,Math.max(0,i-1));break;}
   }
 
-  S.x += Math.cos(S.heading) * moveSpd * dt;
-  S.y += Math.sin(S.heading) * moveSpd * dt;
-  S.x = clamp(S.x, 16, W - 16);
-  S.y = clamp(S.y, 16, H - 16);
-
-  // poslední pojistka proti zacyklení: krátké přibrzdění
-  if (td < 120 * SCL && S.mode === 'idle') S.orbit += dt; else S.orbit = Math.max(0, S.orbit - 2 * dt);
-  if (S.orbit > 3) { S.brake = 0.45; S.orbit = 0; }
-
-  // cesta těla
-  const p0 = S.path[0];
-  if (hyp(S.x - p0.x, S.y - p0.y) > 2) S.path.unshift({ x: S.x, y: S.y });
-  const maxLen = (S.count + 3) * C.segSp * SCL;
-  let acc = 0;
-  for (let i = 1; i < S.path.length; i++) {
-    acc += hyp(S.path[i].x - S.path[i-1].x, S.path[i].y - S.path[i-1].y);
-    if (acc > maxLen) { S.path.length = i + 1; break; }
-  }
-  computeSegs();
-}
-
-function updateFakes(dt){
-  let autos = 0;
-  for (const f of fakes) if (f.auto) autos++;
-  const late = G.time > 100;
-  const need = autos < 1 ? 1 : (late && autos < 2 ? 2 : 0);
-  if (need === 0) G.fakeTimer = -1;
-  else if (G.fakeTimer < 0) G.fakeTimer = autos < 1 ? rnd(2, 3) : rnd(4.5, 7.5) * (G.time > 200 ? 0.7 : 1);
-  else {
-    G.fakeTimer -= dt;
-    if (G.fakeTimer <= 0) { spawnAutoFake(); G.fakeTimer = -1; }
-  }
-}
-
-function updateQuestions(dt){
-  G.qTimer -= dt;
-  if (G.qTimer <= 0) {
-    if (questions.length < 2) spawnQuestion();
-    G.qTimer = rnd(8, 12);
-  }
-  for (let i = questions.length - 1; i >= 0; i--) {
-    questions[i].age += dt;
-    if (questions[i].age >= questions[i].life) questions.splice(i, 1);
-  }
-}
-
-function updateFx(dt){
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i];
-    p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt;
-    p.vx *= (1 - 2.5 * dt); p.vy *= (1 - 2.5 * dt);
-    if (p.age >= p.life) parts.splice(i, 1);
-  }
-  for (let i = texts.length - 1; i >= 0; i--) {
-    texts[i].age += dt;
-    if (texts[i].age >= texts[i].life) texts.splice(i, 1);
-  }
-}
-
-function checkCollisions(){
-  // had žere falešná jablka
-  for (let i = fakes.length - 1; i >= 0; i--) {
-    const f = fakes[i];
-    if (hyp(f.x - S.x, f.y - S.y) < (C.headR + C.fakeR) * SCL) {
-      fakes.splice(i, 1);
-      if (f.bomb) {
-        S.stun = 2.5; S.stunKind = 'bomb'; S.mode = 'idle'; S.shake = 0;
-        addText(f.x, f.y - 24 * SCL, 'BUM!');
-        sfxBoom();
-        for (let k = 0; k < 14; k++)
-          parts.push({ x: f.x, y: f.y, vx: rnd(-160, 160), vy: rnd(-160, 160), age: 0, life: 0.7, color: '#3a3a3a', r: rnd(1.5, 4) * SCL });
-      } else {
-        S.count = Math.min(64, S.count + 4);
-        sfxChomp();
-        for (let k = 0; k < 6; k++)
-          parts.push({ x: f.x, y: f.y, vx: rnd(-70, 70), vy: rnd(-70, 70), age: 0, life: 0.5, color: PENCIL, r: rnd(1, 2.5) * SCL });
+  // eating fakes
+  for(let i=g.fakes.length-1;i>=0;i--){
+    const f=g.fakes[i];
+    if(dist(s.x,s.y,f.x,f.y)<HEAD_R+12){
+      g.fakes.splice(i,1);
+      if(f.bomb){
+        s.stun=2.5;s.stunKind="bomb";
+        SND.boom();g.shake=0.4;
+        addText(g,f.x,f.y-20,"BUM! Had vidí hvězdičky.","#c92a2a");
+      }else{
+        s.segs+=(g.time<75?3:4);
+        SND.eat();
+        addText(g,f.x,f.y-18,"CHŇAP!","#1a3fae");
       }
+      if(f.auto)g.autoTimers.push(rand(2,3)*(g.time>120?0.7:1));
     }
-  }
-  // hráč sbírá otazníky
-  for (let i = questions.length - 1; i >= 0; i--) {
-    const q = questions[i];
-    if (hyp(q.x - P.x, q.y - P.y) < (C.qR * SCL + P.r)) {
-      questions.splice(i, 1);
-      applyQuestion(q);
-    }
-  }
-  // smrt — celé tělo hada
-  if (G.grace > 0) return;
-  const segs = S.segs;
-  for (let i = 0; i < segs.length; i++) {
-    const r = (i === 0 ? C.headR : C.segR) * SCL;
-    if (hyp(segs[i].x - P.x, segs[i].y - P.y) < (P.r + r) * 0.75) { die(); return; }
   }
 }
+function segPositions(s){
+  const out=[];
+  const t=s.trail;
+  let need=SEG_SPACING,acc=0;
+  for(let i=t.length-1;i>0&&out.length<s.segs;i--){
+    const a=t[i],b=t[i-1];
+    const d=dist(a.x,a.y,b.x,b.y);
+    while(acc+d>=need&&out.length<s.segs){
+      const f=(need-acc)/d;
+      out.push({x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f});
+      need+=SEG_SPACING;
+    }
+    acc+=d;
+  }
+  while(out.length<s.segs&&t.length)out.push({x:t[0].x,y:t[0].y});
+  return out;
+}
 
+// ---------- player logic ----------
+function updatePlayer(g,dt){
+  const p=g.player;
+  const maxV=250*SC;
+  p.inInk=false;
+  for(const b of g.inks)if(dist(p.x,p.y,b.x,b.y)<b.r*0.92){p.inInk=true;break;}
+  const inkMul=p.inInk?0.35:1;
+
+  let dvx=0,dvy=0;
+  if(p.keyMode&&(p.keys.u||p.keys.d||p.keys.l||p.keys.r)){
+    let dx=(p.keys.r?1:0)-(p.keys.l?1:0);
+    let dy=(p.keys.d?1:0)-(p.keys.u?1:0);
+    const l=Math.hypot(dx,dy)||1;
+    dvx=dx/l*maxV*inkMul;dvy=dy/l*maxV*inkMul;
+  }else{
+    const dx=p.tx-p.x,dy=p.ty-p.y;
+    const d=Math.hypot(dx,dy);
+    if(d>2){
+      const sp=maxV*clamp(d/90,0,1)*inkMul;
+      dvx=dx/d*sp;dvy=dy/d*sp;
+    }
+  }
+  const approach=(p.inInk?2.2:3.1);
+  p.vx+=(dvx-p.vx)*Math.min(1,approach*dt);
+  p.vy+=(dvy-p.vy)*Math.min(1,approach*dt);
+  p.x+=p.vx*dt;p.y+=p.vy*dt;
+  // walls: soft bounce
+  const m=PR+3;
+  if(p.x<m){p.x=m;p.vx*=-0.3;}
+  if(p.x>W-m){p.x=W-m;p.vx*=-0.3;}
+  if(p.y<m){p.y=m;p.vy*=-0.3;}
+  if(p.y>H-m){p.y=H-m;p.vy*=-0.3;}
+  // rolling rotation (decorative)
+  p.rot+=(p.vx*0.85+p.vy*0.35)*dt/PR;
+}
+
+// ---------- main update ----------
 function update(dt){
-  G.time += dt;
-  if (G.grace > 0) G.grace -= dt;
-  if (G.cool > 0) G.cool = Math.max(0, G.cool - dt);
-  if (G.coolShake > 0) G.coolShake -= dt;
-  if (G.hintT > 0) G.hintT -= dt;
-  updatePlayer(dt);
-  updateSnake(dt);
-  updateFakes(dt);
-  updateQuestions(dt);
-  updateFx(dt);
-  checkCollisions();
-}
+  const g=G;
+  nowSec+=dt;
+  g.time+=dt;
+  if(g.grace>0)g.grace-=dt;
+  if(g.pencilCd>0)g.pencilCd-=dt;
+  if(g.shake>0)g.shake-=dt;
 
-// ===================== kreslení =====================
-function drawBlots(){
-  const ph = Math.floor(now * 2) % 3;   // klidná kresba — jen nepatrné chvění
-  ctx.fillStyle = INK;
-  ctx.globalAlpha = 0.93;
-  for (const b of blots) {
-    const n = b.pr.length;
-    ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const k = i % n, a = k / n * TAU;
-      const rr = b.r * b.pr[k] + jit(b.seed, k, ph, 1.2);
-      const x = b.x + Math.cos(a) * rr, y = b.y + Math.sin(a) * rr;
-      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    for (const d of b.drops) {
-      ctx.beginPath(); ctx.arc(b.x + d.dx, b.y + d.dy, d.r, 0, TAU); ctx.fill();
+  updatePlayer(g,dt);
+  updateSnake(g,dt);
+
+  // auto fake respawns
+  for(let i=g.autoTimers.length-1;i>=0;i--){
+    g.autoTimers[i]-=dt;
+    if(g.autoTimers[i]<=0){g.autoTimers.splice(i,1);spawnAutoFake(g,false);}
+  }
+  if(countAuto(g)<1&&g.autoTimers.length===0)g.autoTimers.push(rand(2,3));
+
+  // question marks
+  g.qTimer-=dt;
+  if(g.qTimer<=0){
+    spawnQ(g);
+    const late=g.time>120;
+    g.qTimer=late?rand(6,9):rand(8,12);
+  }
+  for(let i=g.qmarks.length-1;i>=0;i--){
+    const q=g.qmarks[i];
+    q.life-=dt;
+    if(q.life<=0){g.qmarks.splice(i,1);continue;}
+    if(dist(g.player.x,g.player.y,q.x,q.y)<PR+22){
+      g.qmarks.splice(i,1);
+      applyQ(g,q.x,q.y);
     }
   }
-  ctx.globalAlpha = 1;
+
+  // fake apple age
+  for(const f of g.fakes)f.age+=dt;
+
+  // floating texts
+  for(let i=g.texts.length-1;i>=0;i--){
+    const t=g.texts[i];t.age+=dt;t.y-=22*dt;
+    if(t.age>1.5)g.texts.splice(i,1);
+  }
+
+  // death check
+  if(g.grace<=0){
+    const s=g.snake;
+    if(dist(g.player.x,g.player.y,s.x,s.y)<(PR+HEAD_R)*0.75){endGame();return;}
+    const segs=segPositions(s);
+    for(const sg of segs){
+      if(dist(g.player.x,g.player.y,sg.x,sg.y)<(PR+SEG_R)*0.72){endGame();return;}
+    }
+  }
 }
 
+function applyQ(g,x,y){
+  const opts=[];
+  opts.push(["guma",26],["zvonek",26]);
+  if(g.bombStock<1)opts.push(["bomba",26]);
+  opts.push(["kanka",22]);
+  let tot=0;for(const o of opts)tot+=o[1];
+  let r=Math.random()*tot,pick="guma";
+  for(const o of opts){r-=o[1];if(r<=0){pick=o[0];break;}}
+  if(pick==="guma"){
+    const s=g.snake;
+    const cut=Math.min(6,Math.max(0,s.segs-3));
+    s.segs-=cut;
+    SND.guma();
+    addText(g,x,y-20,"GUMA! Ocas pryč.","#6b6b6b");
+  }else if(pick==="zvonek"){
+    g.snake.stun=Math.max(g.snake.stun,2.0);
+    g.snake.stunKind="bell";
+    SND.zvonek();
+    addText(g,x,y-20,"ZVONEK! Přestávka.","#b8860b");
+  }else if(pick==="bomba"){
+    g.bombStock=1;
+    SND.bombGet();
+    addText(g,x,y-20,"BOMBOVÉ JABLKO v zásobě!","#c92a2a");
+  }else{
+    const ok=addInkFromQ(g);
+    SND.kanka();
+    addText(g,x,y-20,ok?"ŽBLUŇK! Nová kaňka.":"ŽBLUŇK! Inkoust došel.","#22304f");
+  }
+}
+
+// ---------- drawing ----------
+function drawInk(b){
+  const sv=bvSlow;
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  ctx.beginPath();
+  const n=22;
+  for(let i=0;i<=n;i++){
+    const a=i/n*TAU;
+    const base=b.r*(0.87+n1(b.seed+ (i%n)*11.3)*0.2);
+    const wob=(n1(b.seed+(i%n)*5.1+sv*13.7)*2-1)*0.9;
+    const rr=base+wob;
+    const x=Math.cos(a)*rr,y=Math.sin(a)*rr;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  }
+  ctx.closePath();
+  ctx.fillStyle="rgba(24,32,66,0.9)";
+  ctx.fill();
+  ctx.fillStyle="rgba(14,20,46,0.3)";
+  ctx.beginPath();ctx.arc(-b.r*0.15,-b.r*0.1,b.r*0.42,0,TAU);ctx.fill();
+  // gloss
+  ctx.fillStyle="rgba(210,220,255,0.12)";
+  ctx.beginPath();ctx.ellipse(-b.r*0.3,-b.r*0.35,b.r*0.2,b.r*0.1,-0.6,0,TAU);ctx.fill();
+  for(const d of b.drops){
+    ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,TAU);
+    ctx.fillStyle="rgba(24,32,66,0.85)";ctx.fill();
+  }
+  ctx.restore();
+}
 function drawFake(f){
-  const r = C.fakeR * SCL;
-  const pop = clamp((now - f.born) * 4, 0, 1);
   ctx.save();
-  ctx.translate(f.x, f.y);
-  ctx.scale(pop, pop);
-  ctx.strokeStyle = PENCIL;
-  ctx.lineWidth = 1.7;
-  wob(0, 0, r, f.seed, 1.8, 11); ctx.stroke();
-  ctx.lineWidth = 1;
-  wob(1, 0.7, r * 0.9, f.seed + 13, 2, 11); ctx.stroke();
-  ctx.globalAlpha = 0.45;
+  ctx.translate(f.x,f.y);
+  const col=f.bomb?"rgba(80,80,80,0.95)":"rgba(107,107,107,0.85)";
+  ctx.globalAlpha=Math.min(1,f.age*4);
+  // pencil scribble apple
+  sketchStroke(circlePts(0,1,11,f.seed,12),f.seed,1.4,col,1.5,true,"rgba(140,140,140,0.10)");
+  // hatching
+  ctx.strokeStyle="rgba(120,120,120,0.4)";ctx.lineWidth=1;
   ctx.beginPath();
-  for (let i = -1; i <= 1; i++) { ctx.moveTo(-r*0.5 + i*4, r*0.55); ctx.lineTo(r*0.5 + i*4, -r*0.55); }
+  for(let i=-1;i<=1;i++){
+    ctx.moveTo(-6+i*4,7-i*3);ctx.lineTo(4+i*4,-5-i*3);
+  }
   ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.lineWidth = 1.7;
-  ctx.beginPath(); ctx.moveTo(0, -r + 1); ctx.quadraticCurveTo(1, -r - 5, 4, -r - 8); ctx.stroke();
-  if (f.bomb) {
-    ctx.strokeStyle = '#5a5a5a';
-    ctx.beginPath(); ctx.moveTo(4, -r - 8); ctx.quadraticCurveTo(10, -r - 12, 12, -r - 6); ctx.stroke();
-    // jiskra
-    ctx.strokeStyle = RED; ctx.lineWidth = 1.4;
-    const sx = 12, sy = -r - 6, sr = 4 + (boil === 1 ? 1.6 : 0);
+  // stem
+  ctx.strokeStyle=col;ctx.lineWidth=1.5;
+  wobblyPoly([[0,-10],[2,-16]],f.seed+31,1);ctx.stroke();
+  if(f.bomb){
+    // lit fuse
+    wobblyPoly([[2,-16],[7,-21],[12,-20]],f.seed+77,1);
+    ctx.strokeStyle="#555";ctx.stroke();
+    const sp=1+n1(f.seed+bv*13)*2;
+    ctx.strokeStyle="rgba(235,140,30,0.95)";ctx.lineWidth=1.4;
     ctx.beginPath();
-    for (let i = 0; i < 4; i++) {
-      const a = i / 4 * TAU + boil * 0.5;
-      ctx.moveTo(sx + Math.cos(a) * 1.5, sy + Math.sin(a) * 1.5);
-      ctx.lineTo(sx + Math.cos(a) * sr, sy + Math.sin(a) * sr);
+    for(let i=0;i<5;i++){
+      const a=i/5*TAU+bv;
+      ctx.moveTo(12,-20);ctx.lineTo(12+Math.cos(a)*(3+sp),-20+Math.sin(a)*(3+sp));
     }
     ctx.stroke();
   }
   ctx.restore();
 }
-
-function drawQuestion(q){
-  const blink = q.life - q.age < 2 ? (Math.floor(now * 6) % 2 === 0 ? 0.3 : 1) : 1;
-  const pop = clamp(q.age * 5, 0, 1);
+function drawQ(q){
   ctx.save();
-  ctx.globalAlpha = blink * pop;
-  ctx.translate(q.x + jit(q.seed, 1, boil, 1.6), q.y + jit(q.seed, 2, boil, 1.6));
-  ctx.rotate(jit(q.seed, 3, boil, 0.05) + jit(q.seed, 8, 0, 0.12));
-  ctx.fillStyle = BLUE;
-  ctx.font = `bold ${Math.round(46 * SCL)}px ${FONT}`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('?', 0, 0);
+  let a=1;
+  if(q.life<2)a=0.35+0.65*Math.abs(Math.sin(q.life*6));
+  ctx.globalAlpha=a;
+  ctx.fillStyle="#1a3fae";
+  ctx.font="bold 46px "+HW;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  const ox=(n1(q.seed+bv*7)*2-1)*1.6,oy=(n1(q.seed+9+bv*7)*2-1)*1.6;
+  ctx.fillText("?",q.x+ox,q.y+oy);
+  ctx.globalAlpha=a*0.35;
+  ctx.fillText("?",q.x-ox*1.4,q.y-oy*1.4);
   ctx.restore();
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
-
-function drawSnake(){
-  const segs = S.segs;
-  if (!segs.length) return;
-  const sr = C.segR * SCL;
-  ctx.lineWidth = 2.2;
-  for (let i = segs.length - 1; i >= 1; i--) {
-    const s = segs[i];
-    ctx.strokeStyle = BLUE;
-    ctx.fillStyle = 'rgba(60,90,200,0.10)';
-    wob(s.x, s.y, sr * (i === segs.length - 1 ? 0.75 : 1), S.seed + i * 7, 1.3, 10);
-    ctx.fill(); ctx.stroke();
-  }
-  // hlava
-  const hr = C.headR * SCL;
-  let hx = S.x, hy = S.y;
-  if (S.shake) { hx += jit(9, 1, Math.floor(now * 24), 3.2); hy += jit(9, 2, Math.floor(now * 24), 3.2); }
+function drawSnake(g){
+  const s=g.snake;
+  const segs=segPositions(s);
+  const stunned=s.stun>0;
   ctx.save();
-  ctx.translate(hx, hy);
-  ctx.rotate(S.heading);
-  ctx.strokeStyle = BLUE; ctx.fillStyle = 'rgba(60,90,200,0.16)';
-  ctx.lineWidth = 2.6;
-  wob(0, 0, hr, S.seed, 1.4, 12); ctx.fill(); ctx.stroke();
-  // oči
-  ctx.fillStyle = PAPER; ctx.lineWidth = 1.4;
-  for (const sgn of [-1, 1]) {
-    ctx.beginPath(); ctx.arc(hr * 0.35, sgn * hr * 0.42, hr * 0.3, 0, TAU);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = INK;
-    ctx.beginPath(); ctx.arc(hr * 0.45, sgn * hr * 0.42, hr * 0.12, 0, TAU); ctx.fill();
-    ctx.fillStyle = PAPER;
+  if(stunned)ctx.globalAlpha=0.85;
+  // body from tail
+  for(let i=segs.length-1;i>=0;i--){
+    const sg=segs[i];
+    const r=SEG_R*(0.75+0.25*(1-i/Math.max(1,segs.length)));
+    sketchStroke(circlePts(sg.x,sg.y,r,s.tgtKey.length+i*13.7,10),i*29.3,1.1,"#1a3fae",1.7,true,"rgba(40,70,190,0.10)");
   }
-  // jazyk
-  if (S.mode === 'sprint' || (S.mode === 'idle' && Math.floor(now * 2) % 3 === 0)) {
-    ctx.strokeStyle = RED; ctx.lineWidth = 1.6;
-    const fl = hr * (0.9 + (boil === 1 ? 0.3 : 0));
-    ctx.beginPath();
-    ctx.moveTo(hr, 0); ctx.lineTo(hr + fl, 0);
-    ctx.moveTo(hr + fl, 0); ctx.lineTo(hr + fl + 4, -3);
-    ctx.moveTo(hr + fl, 0); ctx.lineTo(hr + fl + 4, 3);
-    ctx.stroke();
+  // head
+  let hx=s.x,hy=s.y;
+  if(s.phase==="tele"){
+    const w=Math.sin(nowSec*42)*3;
+    hx+=Math.cos(s.ang+Math.PI/2)*w;
+    hy+=Math.sin(s.ang+Math.PI/2)*w;
   }
-  ctx.restore();
-  // sprint — čáry pohybu
-  if (S.mode === 'sprint') {
-    ctx.strokeStyle = 'rgba(40,67,174,0.4)'; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-      const off = (i - 1) * 7 * SCL;
-      const bx = hx - Math.cos(S.heading) * hr * 1.6 - Math.sin(S.heading) * off;
-      const by = hy - Math.sin(S.heading) * hr * 1.6 + Math.cos(S.heading) * off;
-      ctx.moveTo(bx, by);
-      ctx.lineTo(bx - Math.cos(S.heading) * 15 * SCL, by - Math.sin(S.heading) * 15 * SCL);
-    }
-    ctx.stroke();
-  }
-  // telegraf výpadu
-  if (S.mode === 'tele') {
-    ctx.fillStyle = RED;
-    ctx.font = `bold ${Math.round(21 * SCL)}px ${FONT}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('!!', hx, hy - hr - 9 * SCL);
-    ctx.textAlign = 'left';
-  }
-  // omráčení
-  if (S.stun > 0) {
-    if (S.stunKind === 'bomb') {
-      ctx.strokeStyle = RED; ctx.lineWidth = 1.6;
-      for (let i = 0; i < 3; i++) {
-        const a = now * 4 + i / 3 * TAU;
-        const x = S.x + Math.cos(a) * hr * 1.8, y = S.y + Math.sin(a) * hr * 1.1 - hr * 1.4;
-        ctx.beginPath();
-        for (let k = 0; k < 3; k++) {
-          const aa = k / 3 * Math.PI + now * 3;
-          ctx.moveTo(x - Math.cos(aa) * 4, y - Math.sin(aa) * 4);
-          ctx.lineTo(x + Math.cos(aa) * 4, y + Math.sin(aa) * 4);
-        }
-        ctx.stroke();
-      }
-    } else {
-      ctx.fillStyle = BLUE;
-      ctx.font = `bold ${Math.round(17 * SCL)}px ${FONT}`;
-      const zz = 'Zzz'.substring(0, 1 + Math.floor(now * 2) % 3);
-      ctx.fillText(zz, S.x + hr, S.y - hr * 1.8);
+  sketchStroke(circlePts(hx,hy,HEAD_R,999,12),777,1.2,"#16368f",2,true,"rgba(40,70,190,0.16)");
+  // eyes
+  const ea=s.ang;
+  for(const side of[-1,1]){
+    const ex=hx+Math.cos(ea)*4+Math.cos(ea+Math.PI/2)*5*side;
+    const ey=hy+Math.sin(ea)*4+Math.sin(ea+Math.PI/2)*5*side;
+    ctx.fillStyle="#fdfaf0";
+    ctx.beginPath();ctx.arc(ex,ey,3,0,TAU);ctx.fill();
+    ctx.strokeStyle="#16368f";ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle="#16368f";
+    if(stunned){
+      ctx.beginPath();
+      ctx.moveTo(ex-2,ey-2);ctx.lineTo(ex+2,ey+2);
+      ctx.moveTo(ex+2,ey-2);ctx.lineTo(ex-2,ey+2);
+      ctx.stroke();
+    }else{
+      ctx.beginPath();ctx.arc(ex+Math.cos(ea)*1.2,ey+Math.sin(ea)*1.2,1.4,0,TAU);ctx.fill();
     }
   }
-}
-
-function drawPlayerAt(x,y,rot,alpha){
-  const r = P.r;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(rot);
-  ctx.globalAlpha = alpha;
-  ctx.strokeStyle = RED;
-  ctx.lineWidth = 2.5;
-  wob(0, 0, r, 77, 1.6, 12);
-  ctx.fillStyle = 'rgba(192,40,40,0.14)';
-  ctx.fill(); ctx.stroke();
-  ctx.lineWidth = 1.2;
-  wob(0.8, 0.5, r * 0.93, 84, 1.9, 12); ctx.stroke();
-  // stopka + lísteček
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, -r + 2); ctx.quadraticCurveTo(2, -r - 6, 5, -r - 8); ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(5, -r - 8);
-  ctx.quadraticCurveTo(12, -r - 12, 14, -r - 5);
-  ctx.quadraticCurveTo(8, -r - 3, 5, -r - 8);
-  ctx.stroke();
-  // odlesk
-  ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.arc(-r * 0.35, -r * 0.3, r * 0.35, Math.PI * 1.1, Math.PI * 1.6);
-  ctx.stroke();
+  // tongue
+  if(s.phase!=="idle"||Math.floor(nowSec*2)%3===0){
+    const tl=s.phase==="go"?14:9;
+    const t1x=hx+Math.cos(ea)*HEAD_R,t1y=hy+Math.sin(ea)*HEAD_R;
+    const t2x=hx+Math.cos(ea)*(HEAD_R+tl),t2y=hy+Math.sin(ea)*(HEAD_R+tl);
+    ctx.strokeStyle="#c92a2a";ctx.lineWidth=1.4;
+    ctx.beginPath();
+    ctx.moveTo(t1x,t1y);ctx.lineTo(t2x,t2y);
+    ctx.lineTo(t2x+Math.cos(ea+2.6)*4,t2y+Math.sin(ea+2.6)*4);
+    ctx.moveTo(t2x,t2y);
+    ctx.lineTo(t2x+Math.cos(ea-2.6)*4,t2y+Math.sin(ea-2.6)*4);
+    ctx.stroke();
+  }
+  // stun stars / zzz
+  if(stunned){
+    ctx.fillStyle=s.stunKind==="bell"?"#b8860b":"#c92a2a";
+    ctx.font="16px "+HW;
+    ctx.textAlign="center";
+    const sym=s.stunKind==="bell"?"z":"✶";
+    for(let i=0;i<3;i++){
+      const a=nowSec*3+i*2.1;
+      ctx.fillText(sym,hx+Math.cos(a)*20,hy-14+Math.sin(a)*7);
+    }
+  }
   ctx.restore();
 }
-
-function drawPlayer(){
-  const flash = G.grace > 0 ? (Math.floor(now * 8) % 2 === 0 ? 0.45 : 0.9) : 1;
-  drawPlayerAt(P.x, P.y, P.rot, flash);
-  if (G.grace > 0) {
+function drawPlayer(g){
+  const p=g.player;
+  ctx.save();
+  ctx.translate(p.x,p.y);
+  ctx.rotate(p.rot);
+  // apple body (red ballpoint)
+  sketchStroke(circlePts(0,1,PR,42.42,13),42.42,1.3,"#c92a2a",2,true,"rgba(220,60,60,0.28)");
+  // dimple + stem + leaf
+  ctx.strokeStyle="#c92a2a";ctx.lineWidth=1.7;
+  wobblyPoly([[0,-10],[1.5,-16],[3.5,-20]],7.7,1);ctx.stroke();
+  sketchStroke([[4,-17],[10,-21],[13,-16],[7,-14],[4,-17]],11.3,0.8,"#b03030",1.3,true,"rgba(200,80,80,0.15)");
+  // little highlight scribble
+  ctx.strokeStyle="rgba(230,120,120,0.5)";ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(-4,-3,5,3.6,4.9);ctx.stroke();
+  ctx.restore();
+  // grace halo
+  if(g.grace>0&&g.state==="play"){
     ctx.save();
-    ctx.strokeStyle = 'rgba(192,40,40,0.55)';
-    ctx.lineWidth = 1.6;
-    ctx.setLineDash([6, 5]);
-    ctx.beginPath(); ctx.arc(P.x, P.y, P.r + 8 * SCL, now * 2, now * 2 + TAU); ctx.stroke();
+    ctx.strokeStyle="rgba(201,42,42,"+(0.35+0.3*Math.sin(nowSec*8))+")";
+    ctx.lineWidth=2;
+    ctx.setLineDash([6,5]);
+    ctx.beginPath();ctx.arc(p.x,p.y,PR+11,nowSec*2,nowSec*2+TAU);ctx.stroke();
     ctx.setLineDash([]);
+    ctx.fillStyle="rgba(201,42,42,0.8)";
+    ctx.font="12px "+HW;ctx.textAlign="center";
+    ctx.fillText("ochrana "+Math.ceil(g.grace)+" s",p.x,p.y-PR-16);
     ctx.restore();
   }
 }
-
-function drawFx(){
-  for (const p of parts) {
-    ctx.globalAlpha = 1 - p.age / p.life;
-    ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  ctx.textAlign = 'center';
-  for (const t of texts) {
-    const k = t.age / t.life;
-    ctx.globalAlpha = 1 - k;
-    ctx.fillStyle = t.color;
-    ctx.font = `bold ${Math.round(t.size * SCL)}px ${FONT}`;
-    ctx.fillText(t.txt, t.x, t.y - k * 30 * SCL);
-  }
-  ctx.globalAlpha = 1;
-  ctx.textAlign = 'left';
-}
-
-function drawPencilIcon(x,y,s){
-  const ready = G.cool <= 0;
-  const shake = G.coolShake > 0 ? jit(3, 1, Math.floor(now * 30), 2.5) : 0;
+function drawHUD(g){
+  // score (teacher's red margin note)
   ctx.save();
-  ctx.translate(x + shake, y);
-  // rámeček
-  ctx.strokeStyle = ready ? RED : 'rgba(150,150,150,0.8)';
-  ctx.lineWidth = 1.6;
-  wavyLine(0, 0, s, 0, 51, 1, 4); ctx.stroke();
-  wavyLine(s, 0, s, s, 52, 1, 4); ctx.stroke();
-  wavyLine(s, s, 0, s, 53, 1, 4); ctx.stroke();
-  wavyLine(0, s, 0, 0, 54, 1, 4); ctx.stroke();
-  // tužka
-  const a = ready ? 1 : 0.45;
-  ctx.globalAlpha = a;
-  ctx.strokeStyle = PENCIL; ctx.lineWidth = 3.4;
-  ctx.beginPath(); ctx.moveTo(s * 0.22, s * 0.78); ctx.lineTo(s * 0.66, s * 0.34); ctx.stroke();
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(s * 0.66, s * 0.34); ctx.lineTo(s * 0.80, s * 0.20);
-  ctx.lineTo(s * 0.72, s * 0.42); ctx.closePath(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s * 0.15, s * 0.85); ctx.lineTo(s * 0.22, s * 0.78); ctx.stroke();
-  ctx.globalAlpha = 1;
-  // kroužek cooldownu
-  if (!ready) {
-    const k = 1 - G.cool / G.coolMax;
-    ctx.strokeStyle = RED; ctx.lineWidth = 3;
+  ctx.fillStyle="#c92a2a";
+  ctx.font=Math.round(clamp(W*0.035,20,30))+"px "+HW;
+  ctx.textAlign="right";ctx.textBaseline="top";
+  ctx.fillText("Čas: "+Math.floor(g.time)+" s",W-16,12);
+  ctx.restore();
+
+  // pencil icon + cooldown ring
+  const cx=34,cy=H-40,R=20;
+  ctx.save();
+  ctx.lineWidth=2;
+  ctx.strokeStyle="rgba(107,107,107,0.9)";
+  ctx.fillStyle="rgba(253,250,240,0.85)";
+  ctx.beginPath();ctx.arc(cx,cy,R,0,TAU);ctx.fill();ctx.stroke();
+  // pencil glyph
+  ctx.save();
+  ctx.translate(cx,cy);ctx.rotate(-0.7);
+  ctx.fillStyle="#8a7a4a";
+  ctx.fillRect(-9,-3,13,6);
+  ctx.fillStyle="#e8d8a8";
+  ctx.beginPath();ctx.moveTo(4,-3);ctx.lineTo(10,0);ctx.lineTo(4,3);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#333";
+  ctx.beginPath();ctx.moveTo(8,-1);ctx.lineTo(10,0);ctx.lineTo(8,1);ctx.closePath();ctx.fill();
+  ctx.restore();
+  if(g.pencilCd>0){
+    ctx.strokeStyle="rgba(60,60,60,0.55)";
+    ctx.lineWidth=4;
     ctx.beginPath();
-    ctx.arc(s / 2, s / 2, s * 0.46, -Math.PI / 2, -Math.PI / 2 + k * TAU);
+    ctx.arc(cx,cy,R+3,-Math.PI/2,-Math.PI/2+TAU*(g.pencilCd/PENCIL_CD));
     ctx.stroke();
+    ctx.fillStyle="rgba(250,246,235,0.55)";
+    ctx.beginPath();ctx.arc(cx,cy,R-1,0,TAU);ctx.fill();
+  }else{
+    ctx.strokeStyle="rgba(201,42,42,"+(0.5+0.3*Math.sin(nowSec*5))+")";
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(cx,cy,R+4,0,TAU);ctx.stroke();
   }
-  ctx.restore();
-}
-function drawBombIcon(x,y,s){
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.strokeStyle = RED; ctx.lineWidth = 1.6;
-  wavyLine(0, 0, s, 0, 61, 1, 4); ctx.stroke();
-  wavyLine(s, 0, s, s, 62, 1, 4); ctx.stroke();
-  wavyLine(s, s, 0, s, 63, 1, 4); ctx.stroke();
-  wavyLine(0, s, 0, 0, 64, 1, 4); ctx.stroke();
-  ctx.translate(s / 2, s / 2 + 3);
-  const r = s * 0.26;
-  ctx.strokeStyle = PENCIL; ctx.lineWidth = 1.7;
-  wob(0, 0, r, 66, 1.4, 10); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(0, -r + 1); ctx.quadraticCurveTo(1, -r - 4, 3, -r - 6); ctx.stroke();
-  ctx.strokeStyle = '#5a5a5a';
-  ctx.beginPath(); ctx.moveTo(3, -r - 6); ctx.quadraticCurveTo(8, -r - 9, 9, -r - 4); ctx.stroke();
-  ctx.strokeStyle = RED; ctx.lineWidth = 1.3;
-  ctx.beginPath();
-  for (let i = 0; i < 4; i++) {
-    const a2 = i / 4 * TAU + boil * 0.5;
-    ctx.moveTo(9 + Math.cos(a2) * 1.2, -r - 4 + Math.sin(a2) * 1.2);
-    ctx.lineTo(9 + Math.cos(a2) * 3.6, -r - 4 + Math.sin(a2) * 3.6);
-  }
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawHUD(){
-  const t = Math.floor(G.time);
-  ctx.fillStyle = RED;
-  ctx.textAlign = 'center';
-  ctx.font = `bold ${Math.round(24 * Math.min(SCL, 1))}px ${FONT}`;
-  ctx.fillText(`Čas: ${t} s`, W / 2 + jit(21, 1, boil, 0.8), 32);
-  ctx.font = `${Math.round(14 * Math.min(SCL, 1))}px ${FONT}`;
-  ctx.globalAlpha = 0.85;
-  ctx.fillText(`zatím: ${gradeOf(G.time).mark}`, W / 2, 52);
-  ctx.globalAlpha = 1;
-  ctx.textAlign = 'left';
-  const s = Math.round(46 * Math.min(SCL, 1));
-  drawPencilIcon(14, 14, s);
-  if (G.bomb > 0) drawBombIcon(14 + s + 10, 14, s);
-  if (G.hintT > 0 && G.time > 2.5) {
-    ctx.fillStyle = 'rgba(130,136,154,0.9)';
-    ctx.font = `${Math.round(13 * Math.min(SCL, 1))}px ${FONT}`;
-    ctx.fillText('← klikni kamkoli = nakreslíš návnadu', 14, 14 + s + 20);
-  }
-}
-
-function wrapText(txt, maxW){
-  const words = txt.split(' ');
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
-    else line = test;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-function drawMenu(){
-  // titulek
-  ctx.save();
-  ctx.translate(W / 2 + jit(1, 1, boil, 2), H * 0.13 + jit(1, 2, boil, 2));
-  ctx.rotate(-0.02 + jit(1, 3, boil, 0.008));
-  ctx.fillStyle = RED;
-  const ts = Math.min(86 * SCL, W * 0.15);
-  ctx.font = `bold ${Math.round(ts)}px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.fillText('SVAČINA', 0, 0);
-  ctx.strokeStyle = RED; ctx.lineWidth = 2.2;
-  wavyLine(-ts * 2.1, ts * 0.28, ts * 2.1, ts * 0.28, 11, 2.5, 12); ctx.stroke();
-  ctx.lineWidth = 1.2;
-  wavyLine(-ts * 2.0, ts * 0.36, ts * 2.0, ts * 0.36, 12, 2.5, 12); ctx.stroke();
-  ctx.restore();
-  // jablko a had po stranách titulku
-  if (W > 600) {
-    drawPlayerAt(W / 2 - Math.min(ts * 2.7, W * 0.38), H * 0.115, now * 0.7, 1);
-    const sx = W / 2 + Math.min(ts * 2.7, W * 0.38), sy = H * 0.115;
-    ctx.strokeStyle = BLUE; ctx.lineWidth = 2.2;
+  // bomb stock icon
+  if(g.bombStock>0){
+    const bx2=cx+52;
+    ctx.lineWidth=2;
+    ctx.strokeStyle="rgba(201,42,42,0.9)";
+    ctx.fillStyle="rgba(253,250,240,0.85)";
+    ctx.beginPath();ctx.arc(bx2,cy,R,0,TAU);ctx.fill();ctx.stroke();
+    ctx.fillStyle="#39404e";
+    ctx.beginPath();ctx.arc(bx2,cy+3,8,0,TAU);ctx.fill();
+    ctx.strokeStyle="#555";
+    ctx.beginPath();ctx.moveTo(bx2+2,cy-4);ctx.quadraticCurveTo(bx2+7,cy-11,bx2+11,cy-9);ctx.stroke();
+    ctx.strokeStyle="rgba(235,140,30,0.95)";
     ctx.beginPath();
-    for (let i = 0; i <= 14; i++) {
-      const t2 = i / 14;
-      const x = sx - 34 + t2 * 68;
-      const y = sy + Math.sin(t2 * TAU * 1.5 + now * 2) * 9 + jit(13, i, boil, 1);
-      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    for(let i=0;i<4;i++){
+      const a=i/4*TAU+bv;
+      ctx.moveTo(bx2+11,cy-9);ctx.lineTo(bx2+11+Math.cos(a)*4,cy-9+Math.sin(a)*4);
     }
     ctx.stroke();
-    ctx.fillStyle = BLUE;
-    ctx.beginPath(); ctx.arc(sx + 38, sy + Math.sin(TAU * 1.5 + now * 2) * 9, 6 * SCL, 0, TAU); ctx.fill();
+    ctx.fillStyle="rgba(201,42,42,0.85)";
+    ctx.font="11px "+HW;ctx.textAlign="center";
+    ctx.fillText("bomba",bx2,cy+R+13);
   }
-  ctx.textAlign = 'center';
-  ctx.fillStyle = BLUE;
-  ctx.font = `${Math.round(23 * SCL)}px ${FONT}`;
-  ctx.fillText('Jsi svačina. Uteč hadovi.', W / 2, H * 0.21);
-  ctx.fillStyle = RED;
-  ctx.globalAlpha = 0.65 + 0.35 * Math.sin(now * 4);
-  ctx.font = `bold ${Math.round(17 * SCL)}px ${FONT}`;
-  ctx.fillText('Klikni, ťukni nebo zmáčkni MEZERNÍK — a utíkej!', W / 2, H * 0.265);
-  ctx.globalAlpha = 1;
-  if (G.best > 0) {
-    ctx.fillStyle = 'rgba(192,40,40,0.85)';
-    ctx.font = `${Math.round(15 * SCL)}px ${FONT}`;
-    ctx.fillText(`Rekord třídy: ${Math.floor(G.best)} s (${gradeOf(G.best).mark})`, W / 2, H * 0.305);
-  }
-
-  // TAHÁK
-  const lines = [
-    ['TAHÁK  (schovej před učitelem!)', PENCIL, true],
-    ['Tužka: klik nakreslí falešné jablko. Had mu neodolá', PENCIL, false],
-    ['a po sežrání vyroste — delší tělo, delší zeď.', PENCIL, false],
-    ['Otazník: GUMA smaže hadovi ocas · ZVONEK = přestávka', PENCIL, false],
-    ['· BOMBA omráčí (tvá příští návnada) · KAŇKA přibude.', PENCIL, false],
-    ['Kaňky brzdí jen tebe. Had po nich klouže jak po ledě.', PENCIL, false],
-    ['Známky: 15 s → 5 · 30 s → 4 · 60 s → 3 · 120 s → 2', PENCIL, false],
-    ['210 s → 1 · 330 s → 1* · dál → POCHVALA ŘEDITELE', PENCIL, false],
-    ['Pochvalu ředitele prý ještě nikdo živý nedostal.', RED, false],
-  ];
-  const panelW = Math.min(W - 28, 560);
-  ctx.font = `13px ${FONT}`;
-  let maxW = 0;
-  for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l[0]).width);
-  const fs = clamp(13 * (panelW - 36) / maxW, 10.5, 15);
-  const lh = fs * 1.5;
-  const panelH = lines.length * lh + 34;
-  const px0 = W / 2 - panelW / 2, py0 = H * 0.35;
+  ctx.fillStyle="rgba(107,107,107,0.8)";
+  ctx.font="11px "+HW;ctx.textAlign="center";
+  ctx.fillText("tužka",cx,cy+R+13);
+  ctx.restore();
+}
+function drawTexts(g){
   ctx.save();
-  ctx.translate(W / 2, py0 + panelH / 2);
-  ctx.rotate(0.012);
-  ctx.fillStyle = 'rgba(60,50,20,0.10)';
-  ctx.fillRect(-panelW / 2 + 5, -panelH / 2 + 6, panelW, panelH);
-  ctx.fillStyle = '#fdfaf1';
-  ctx.fillRect(-panelW / 2, -panelH / 2, panelW, panelH);
-  ctx.strokeStyle = PENCIL; ctx.lineWidth = 1.2;
-  ctx.setLineDash([5, 4]);
-  ctx.strokeRect(-panelW / 2 + 4, -panelH / 2 + 4, panelW - 8, panelH - 8);
-  ctx.setLineDash([]);
-  ctx.textAlign = 'left';
-  let yy = -panelH / 2 + 24;
-  for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    ctx.fillStyle = l[1];
-    ctx.font = `${l[2] ? 'bold ' : ''}${Math.round(fs)}px ${FONT}`;
-    ctx.fillText(l[0], -panelW / 2 + 18, yy + jit(70 + i, 1, boil, 0.5));
-    yy += lh;
-    if (i === 0) yy += 4;
+  ctx.textAlign="center";
+  for(const t of g.texts){
+    const a=clamp(1.4-t.age,0,1);
+    ctx.globalAlpha=a;
+    ctx.fillStyle=t.color;
+    ctx.font="bold "+Math.round(clamp(W*0.028,17,24))+"px "+HW;
+    ctx.fillText(t.txt,clamp(t.x,90,W-90),t.y);
   }
   ctx.restore();
-  ctx.textAlign = 'left';
-}
-
-function drawPause(){
-  ctx.fillStyle = 'rgba(251,247,236,0.78)';
-  ctx.fillRect(0, 0, W, H);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = RED;
-  ctx.font = `bold ${Math.round(52 * SCL)}px ${FONT}`;
-  ctx.fillText('PŘESTÁVKA', W / 2, H * 0.42);
-  ctx.fillStyle = BLUE;
-  ctx.font = `${Math.round(19 * SCL)}px ${FONT}`;
-  ctx.fillText('Zvonilo. Klikni nebo zmáčkni klávesu a pokračuj v úprku.', W / 2, H * 0.50);
-  ctx.textAlign = 'left';
-}
-
-function drawOver(){
-  ctx.fillStyle = 'rgba(251,247,236,0.86)';
-  ctx.fillRect(0, 0, W, H);
-  const g = gradeOf(G.time);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = BLUE;
-  ctx.font = `${Math.round(20 * SCL)}px ${FONT}`;
-  ctx.fillText('Křup. Svačina snědena. Hodnocení učitele:', W / 2, H * 0.22);
-  // známka v kroužku
-  const long = g.mark.length > 3;
-  const ms = long ? Math.min(36 * SCL, W / (g.mark.length * 0.62)) : 108 * SCL;
-  ctx.fillStyle = RED;
-  ctx.font = `bold ${Math.round(ms)}px ${FONT}`;
-  const my = H * 0.38;
-  ctx.save();
-  ctx.translate(W / 2 + jit(2, 1, boil, 1.5), my + jit(2, 2, boil, 1.5));
-  ctx.rotate(-0.03);
-  ctx.fillText(g.mark, 0, ms * 0.32);
-  const tw = ctx.measureText(g.mark).width;
-  ctx.strokeStyle = RED; ctx.lineWidth = 2.6;
-  wobEllipse(0, 0, tw * 0.62 + 18 * SCL, ms * 0.62 + 10 * SCL, 6, 3, 22); ctx.stroke();
-  ctx.lineWidth = 1.3;
-  wobEllipse(2, 2, tw * 0.62 + 22 * SCL, ms * 0.62 + 14 * SCL, 9, 3, 22); ctx.stroke();
-  ctx.restore();
-  // komentář
-  ctx.fillStyle = RED;
-  ctx.font = `${Math.round(19 * SCL)}px ${FONT}`;
-  const cw = Math.min(W - 60, 620);
-  const cl = wrapText(g.txt, cw);
-  let cy = H * 0.52;
-  for (const l of cl) { ctx.fillText(l, W / 2, cy); cy += 26 * SCL; }
-  // časy
-  ctx.fillStyle = 'rgba(40,67,174,0.9)';
-  ctx.font = `${Math.round(16 * SCL)}px ${FONT}`;
-  ctx.fillText(`Vydržel jsi ${G.time.toFixed(1).replace('.', ',')} s.`, W / 2, cy + 12 * SCL);
-  if (G.newBest) {
-    ctx.fillStyle = RED;
-    ctx.font = `bold ${Math.round(18 * SCL)}px ${FONT}`;
-    ctx.fillText('NOVÝ REKORD TŘÍDY!', W / 2, cy + 38 * SCL);
-  } else if (G.best > 0) {
-    ctx.fillText(`Rekord třídy: ${Math.floor(G.best)} s.`, W / 2, cy + 38 * SCL);
-  }
-  ctx.fillStyle = RED;
-  ctx.globalAlpha = 0.6 + 0.4 * Math.sin(now * 4);
-  ctx.font = `bold ${Math.round(16 * SCL)}px ${FONT}`;
-  ctx.fillText('Klikni nebo zmáčkni mezerník — jde se na opravu.', W / 2, H * 0.78);
-  ctx.globalAlpha = 1;
-  ctx.textAlign = 'left';
 }
 
 function draw(){
-  ctx.clearRect(0, 0, W, H);
-  if (paper) ctx.drawImage(paper, 0, 0, W, H);
-  drawDecor();
-  if (G.state === 'menu') { drawMenu(); return; }
-  drawBlots();
-  for (const q of questions) drawQuestion(q);
-  for (const f of fakes) drawFake(f);
-  drawSnake();
-  if (G.state !== 'dying' && G.state !== 'over') drawPlayer();
-  drawFx();
-  if (G.state === 'play' || G.state === 'pause' || G.state === 'dying') drawHUD();
-  if (G.state === 'pause') drawPause();
-  if (G.state === 'over') drawOver();
+  const g=G;
+  ctx.save();
+  if(g&&g.shake>0){
+    ctx.translate((Math.random()*2-1)*g.shake*14,(Math.random()*2-1)*g.shake*14);
+  }
+  ctx.drawImage(paper,0,0,W,H);
+  if(g){
+    for(const b of g.inks)drawInk(b);
+    for(const f of g.fakes)drawFake(f);
+    for(const q of g.qmarks)drawQ(q);
+    drawSnake(g);
+    drawPlayer(g);
+    drawTexts(g);
+    if(g.state==="play"||g.state==="pause")drawHUD(g);
+  }
+  ctx.restore();
 }
 
-// ===================== vstup =====================
-let tapInfo = null;
-cv.addEventListener('pointermove', (e) => { M.x = e.clientX; M.y = e.clientY; });
-cv.addEventListener('pointerdown', (e) => {
-  AU.init();
-  M.x = e.clientX; M.y = e.clientY;
-  tapInfo = { x: e.clientX, y: e.clientY, t: performance.now() };
-});
-cv.addEventListener('pointerup', (e) => {
-  AU.init();
-  const ti = tapInfo; tapInfo = null;
-  if (G.state === 'menu') { startRound(); return; }
-  if (G.state === 'pause') { resumeGame(); return; }
-  if (G.state === 'over') { if (G.overT > 0.5) startRound(); return; }
-  if (G.state === 'play' && ti) {
-    const d = hyp(e.clientX - ti.x, e.clientY - ti.y);
-    if (performance.now() - ti.t < 350 && d < 14) tryDrawFake(e.clientX, e.clientY);
-  }
-});
-cv.addEventListener('pointercancel', () => { tapInfo = null; });
-window.addEventListener('keydown', (e) => {
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-  AU.init();
-  const k = e.key.toLowerCase();
-  keys.add(k);
-  if (G.state === 'menu' && (k === ' ' || k === 'enter')) startRound();
-  else if (G.state === 'pause') resumeGame();
-  else if (G.state === 'over' && (k === ' ' || k === 'enter' || k === 'r') && G.overT > 0.5) startRound();
-});
-window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => pauseGame());
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
-cv.addEventListener('contextmenu', (e) => e.preventDefault());
-window.addEventListener('resize', resize);
-
-// ===================== smyčka =====================
-let last = performance.now();
-function frame(ts){
-  requestAnimationFrame(frame);
-  const dt = clamp((ts - last) / 1000, 0, 0.05);
-  last = ts;
-  now = ts / 1000;
-  boil = Math.floor(now * 6) % 3;
-  if (G.state === 'play') update(dt);
-  else if (G.state === 'dying') {
-    G.dieT += dt; updateFx(dt);
-    if (G.dieT > 1.0) { G.state = 'over'; G.overT = 0; }
-  }
-  else if (G.state === 'over') { G.overT += dt; updateFx(dt); }
+// ---------- main loop ----------
+let lastT=performance.now();
+function frame(t){
+  const dtRaw=(t-lastT)/1000;
+  lastT=t;
+  const dt=clamp(dtRaw,0,1/30);
+  nowSec=t/1000;
+  bv=Math.floor(t/1000*6)%3;
+  bvSlow=Math.floor(t/1000*1.4)%2;
+  if(G&&G.state==="play")update(dt);
   draw();
+  requestAnimationFrame(frame);
 }
 
+// ---------- boot ----------
 resize();
-M.x = W / 2; M.y = H / 2;
+G=newGame();
+G.state="menu";
+refreshMenuBest();
 requestAnimationFrame(frame);
 
-// ladicí háček pro testy (neovlivňuje hru)
-window.SV = { G, P, S, fakes, questions, blots, startRound, M,
-  step(dt, n){
-    n = n || 1;
-    for (let i = 0; i < n; i++) {
-      now += dt; boil = Math.floor(now * 6) % 3;
-      if (G.state === 'play') update(dt);
-      else if (G.state === 'dying') { G.dieT += dt; updateFx(dt); if (G.dieT > 1) { G.state = 'over'; G.overT = 0; } }
-      else if (G.state === 'over') G.overT += dt;
-    }
-  },
-  draw };
-
+// debug handle (silent; used by automated tests)
+window.__svacina={
+  get G(){return G;},
+  startGame,toMenu,setPause,endGame,update,segPositions,
+  get best(){return best;},
+  get size(){return{W,H,SC};},
+};
 })();
 </script>
 </body>
